@@ -155,7 +155,7 @@ def login_system():
                 st.session_state.current_user = "科研人员"
                 # 重新生成用户ID，确保数据隔离
                 st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                st.experimental_rerun()
+                st.rerun()
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -166,7 +166,7 @@ def login_system():
                     # 重新生成用户ID，确保数据隔离
                     st.session_state.user_id = str(datetime.datetime.now().timestamp())
                     st.success("✅ 以科研人员身份登录")
-                    st.experimental_rerun()
+                    st.rerun()
 
             with col2:
                 if st.button("🔐 管理员登录", use_container_width=True):
@@ -188,7 +188,7 @@ def login_system():
 
                 if st.button("❌ 取消"):
                     st.session_state.show_admin_login = False
-                    st.experimental_rerun()
+                    st.rerun()
 
 
 def handle_admin_login(password):
@@ -202,7 +202,7 @@ def handle_admin_login(password):
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
         st.success("✅ 管理员身份验证成功！")
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.error("❌ 密码错误，请重新输入")
 
