@@ -76,7 +76,7 @@ def init_session_state():
     if 'user_role' not in st.session_state:
         st.session_state.user_role = "科研人员"
     if 'is_authenticated' not in st.session_state:
-        st.session_state.is_authenticated = False
+        st.session_state.is_authenticated = True  # 修改：默认已登录
     if 'submissions' not in st.session_state:
         st.session_state.submissions = load_submissions()
     if 'warning_journals' not in st.session_state:
@@ -84,9 +84,9 @@ def init_session_state():
     if 'show_admin_login' not in st.session_state:
         st.session_state.show_admin_login = False
     if 'current_user' not in st.session_state:
-        st.session_state.current_user = None
-    if 'user_id' not in st.session_state:  # 新增：用户唯一标识
-        st.session_state.user_id = str(datetime.datetime.now().timestamp())  # 时间戳作为临时ID
+        st.session_state.current_user = "科研人员"  # 修改：默认用户
+    if 'user_id' not in st.session_state:
+        st.session_state.user_id = str(datetime.datetime.now().timestamp())
 
 
 def init_warning_journals():
@@ -144,7 +144,6 @@ def login_system():
     """登录系统界面"""
     with st.sidebar:
         st.header("🔐 系统登录")
-        st.info("科研人员无需密码，直接使用功能")
 
         # 显示当前身份
         if st.session_state.user_role == "科研办审核员":
@@ -153,26 +152,12 @@ def login_system():
                 st.session_state.user_role = "科研人员"
                 st.session_state.is_authenticated = True
                 st.session_state.current_user = "科研人员"
-                # 重新生成用户ID，确保数据隔离
                 st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                # 使用 st.rerun() 替代 st.rerun()
                 st.rerun()
         else:
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🚀 科研人员登录", use_container_width=True, type="primary"):
-                    st.session_state.user_role = "科研人员"
-                    st.session_state.is_authenticated = True
-                    st.session_state.current_user = "科研人员"
-                    # 重新生成用户ID，确保数据隔离
-                    st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                    st.success("✅ 以科研人员身份登录")
-                    # 使用 st.rerun() 替代 st.rerun()
-                    st.rerun()
-
-            with col2:
-                if st.button("🔐 管理员登录", use_container_width=True):
-                    st.session_state.show_admin_login = True
+            st.success("👤 当前身份：科研人员")
+            if st.button("🔐 管理员登录"):
+                st.session_state.show_admin_login = True
 
             # 管理员登录表单
             if st.session_state.show_admin_login:
@@ -190,7 +175,6 @@ def login_system():
 
                 if st.button("❌ 取消"):
                     st.session_state.show_admin_login = False
-                    # 使用 st.rerun() 替代 st.rerun()
                     st.rerun()
 
 
@@ -268,26 +252,11 @@ def main_application():
     # 应用标题和描述
     st.title("📚 论文投稿备案与期刊预警系统")
 
-    # 根据用户角色显示不同的界面
-    if not st.session_state.is_authenticated:
-        show_welcome_page()
-    elif st.session_state.user_role == "科研人员":
+    # 直接显示科研人员界面，跳过欢迎页面
+    if st.session_state.user_role == "科研人员":
         show_researcher_interface()
     else:
         show_admin_interface()
-
-
-def show_welcome_page():
-    """显示欢迎页面"""
-    st.markdown("---")
-    st.info("🚀 系统已就绪，请使用左侧菜单开始操作")
-
-    # 显示系统状态
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("预警期刊", len(st.session_state.warning_journals))
-    with col2:
-        st.metric("总备案记录", len(st.session_state.submissions))
 
 
 def show_researcher_interface():
