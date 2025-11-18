@@ -101,7 +101,7 @@ def init_warning_journals():
                 df_cleaned = clean_dataframe(df)
                 if not df_cleaned.empty:
                     st.session_state.warning_journals = df_cleaned
-                    st.success(f"✅ 预警期刊数据已加载（编码: {encoding}）")
+                    # 移除这行：st.success(f"✅ 预警期刊数据已加载（编码: {encoding}）")
                     return
             except (UnicodeDecodeError, LookupError):
                 continue
@@ -115,7 +115,6 @@ def init_warning_journals():
     except FileNotFoundError:
         st.session_state.warning_journals = create_sample_journals()
         st.info("📝 使用示例预警期刊数据，请上传CSV文件")
-
 
 def clean_dataframe(df):
     """清理数据框"""
