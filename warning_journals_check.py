@@ -92,13 +92,29 @@ def init_session_state():
 def init_warning_journals():
     """初始化预警期刊数据"""
     try:
-        # 尝试读取CSV文件
-        df = pd.read_csv('warning_journals_20251117.csv')
-        df_cleaned = clean_dataframe(df)
-        st.session_state.warning_journals = df_cleaned
-    except FileNotFoundError:
-        # 如果文件不存在，创建示例数据
+        # 尝试多种编码方式读取CSV文件
+        encodings = ['utf-8', 'gbk', 'gb2312', 'latin1', 'cp1252']
+
+        for encoding in encodings:
+            try:
+                df = pd.read_csv('warning_journals_20251117.csv', encoding=encoding)
+                df_cleaned = clean_dataframe(df)
+                if not df_cleaned.empty:
+                    st.session_state.warning_journals = df_cleaned
+                    st.success(f"✅ 预警期刊数据已加载（编码: {encoding}）")
+                    return
+            except (UnicodeDecodeError, LookupError):
+                continue
+            except Exception as e:
+                continue
+
+        # 如果所有编码都失败，使用示例数据
         st.session_state.warning_journals = create_sample_journals()
+        st.warning("⚠️ 无法读取CSV文件，使用示例数据")
+
+    except FileNotFoundError:
+        st.session_state.warning_journals = create_sample_journals()
+        st.info("📝 使用示例预警期刊数据，请上传CSV文件")
 
 
 def clean_dataframe(df):
