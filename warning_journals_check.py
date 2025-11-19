@@ -191,7 +191,7 @@ def login_system():
                 st.session_state.is_authenticated = True
                 st.session_state.current_user = "科研人员"
                 st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                st.experimental_rerun()
+                st.rerun()
         else:
             st.success("👤 当前身份：科研人员")
             if st.button("🔐 管理员登录"):
@@ -213,7 +213,7 @@ def login_system():
 
                 if st.button("❌ 取消"):
                     st.session_state.show_admin_login = False
-                    st.experimental_rerun()
+                    st.rerun()
 
 
 def handle_admin_login(password):
@@ -227,8 +227,8 @@ def handle_admin_login(password):
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
         st.success("✅ 管理员身份验证成功！")
-        # 使用 st.experimental_rerun() 替代 st.experimental_rerun()
-        st.experimental_rerun()
+        # 使用 st.rerun() 替代 st.rerun()
+        st.rerun()
     else:
         st.error("❌ 密码错误，请重新输入")
 
