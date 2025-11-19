@@ -29,6 +29,45 @@ hide_menu_style = """
 """
 st.markdown(hide_menu_style, unsafe_allow_html=True)
 
+# 完整美化的标签页样式（调整字体大小）
+tab_style_complete = """
+<style>
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 16px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 55px;
+        white-space: pre-wrap;
+        background-color: #f8f9fa;
+        border-radius: 8px 8px 0px 0px;
+        gap: 8px;
+        padding: 14px 26px;
+        font-weight: bold;
+        font-size: 24px !important; /* 增大标签页字体大小 */
+        border: 1px solid #dee2e6;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #1f77b4;
+        color: white;
+        font-size: 24px !important; /* 增大选中标签页字体大小 */
+        border: 1px solid #1f77b4;
+    }
+
+    .stTabs [data-baseweb="tab"]:hover {
+        background-color: #e9ecef;
+        color: #1f77b4;
+    }
+
+    .stTabs [aria-selected="true"]:hover {
+        background-color: #1f77b4;
+        color: white;
+    }
+</style>
+"""
+
+st.markdown(tab_style_complete, unsafe_allow_html=True)
 
 # ==================== 数据持久化函数 ====================
 def save_submissions():
@@ -152,7 +191,7 @@ def login_system():
                 st.session_state.is_authenticated = True
                 st.session_state.current_user = "科研人员"
                 st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                st.rerun()
+                st.experimental_rerun()
         else:
             st.success("👤 当前身份：科研人员")
             if st.button("🔐 管理员登录"):
@@ -174,7 +213,7 @@ def login_system():
 
                 if st.button("❌ 取消"):
                     st.session_state.show_admin_login = False
-                    st.rerun()
+                    st.experimental_rerun()
 
 
 def handle_admin_login(password):
@@ -188,8 +227,8 @@ def handle_admin_login(password):
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
         st.success("✅ 管理员身份验证成功！")
-        # 使用 st.rerun() 替代 st.rerun()
-        st.rerun()
+        # 使用 st.experimental_rerun() 替代 st.experimental_rerun()
+        st.experimental_rerun()
     else:
         st.error("❌ 密码错误，请重新输入")
 
@@ -260,16 +299,316 @@ def main_application():
 
 def show_researcher_interface():
     """科研人员界面"""
-    tab1, tab2, tab3 = st.tabs(["📝 投稿备案", "📋 我的备案记录", "🔍 预警期刊查询"])
+    tab1, tab2, tab3 = st.tabs(["🔍 预警期刊查询", "📝 投稿备案", "📋 我的备案记录"])
 
     with tab1:
-        show_submission_interface()
+        show_journal_search_interface()
 
     with tab2:
-        show_my_submissions()
+        show_submission_interface()
 
     with tab3:
-        show_journal_search_interface()
+        show_my_submissions()
+
+def show_journal_search_interface():
+    """期刊查询界面"""
+    st.header("预警期刊查询")
+
+    # 搜索功能
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        search_term = st.text_input("🔍 搜索期刊名称", placeholder="输入期刊名称关键词")
+
+    with col2:
+        search_type = st.selectbox("查询方式", ["模糊查询", "精确查询"])
+
+    # 筛选数据
+    display_df = st.session_state.warning_journals.copy()
+
+    if search_term:
+        if search_type == "精确查询":
+            # 精确匹配期刊名称
+            display_df = display_df[
+                display_df['期刊名称'].str.strip().str.lower() == search_term.strip().lower()
+                ]
+        else:
+            # 模糊查询（包含关系）
+            display_df = display_df[
+                display_df['期刊名称'].str.contains(search_term, case=False, na=False)
+            ]
+
+    # 显示结果
+    if len(display_df) > 0:
+        st.write(f"找到 **{len(display_df)}** 条相关记录：")
+        st.dataframe(display_df, use_container_width=True)
+
+        # 提供导出功能
+        csv = display_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 导出查询结果(CSV)",
+            data=csv,
+            file_name=f"预警期刊查询结果_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
+            mime='text/csv',
+        )
+    else:
+        st.info("未找到匹配的预警期刊记录")
+
+
+def show_submission_interface():
+    """投稿备案界面"""
+    st.header("论文投稿备案")
+
+    # 使用 session state 来跟踪所有数据
+    if 'paper_info' not in st.session_state:
+        st.session_state.paper_info = {}
+    if 'department_choice' not in st.session_state:
+        st.session_state.department_choice = "心内科"
+    if 'other_department_text' not in st.session_state:
+        st.session_state.other_department_text = ""
+
+    # 第一个表单：论文基本信息（无保存按钮，直接填写）
+    st.subheader("📄 论文基本信息")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        paper_title = st.text_input("论文标题*", placeholder="请输入完整的论文标题",
+                                    value=st.session_state.paper_info.get('paper_title', ''))
+        authors = st.text_input("第一作者*", placeholder="第一作者姓名",
+                               value=st.session_state.paper_info.get('authors', ''))
+        corresponding_author = st.text_input("通讯作者*", placeholder="通讯作者姓名",
+                                             value=st.session_state.paper_info.get('corresponding_author', ''))
+
+    with col2:
+        target_journal = st.text_input("目标期刊名称*", placeholder="请输入完整的期刊名称",
+                                       value=st.session_state.paper_info.get('target_journal', ''))
+        planned_submission_date = st.date_input("拟投稿日期",
+                                                value=st.session_state.paper_info.get('planned_submission_date',
+                                                                                      datetime.date.today()))
+
+    # 实时保存论文信息到session state
+    if all([paper_title, authors, corresponding_author, target_journal]):
+        st.session_state.paper_info = {
+            'paper_title': paper_title,
+            'authors': authors,
+            'corresponding_author': corresponding_author,
+            'target_journal': target_journal,
+            'planned_submission_date': planned_submission_date
+        }
+
+    # 第二个部分：科室选择（独立部分，无需表单，即时响应）
+    st.markdown("---")
+    st.subheader("🏥 科室信息")
+
+    col_dept1, col_dept2 = st.columns([1, 1])
+
+    with col_dept1:
+        # 科室选择
+        department_options = [
+            "心内科", "心外科", "超声科", "放射科", "体外循环科",
+            "麻醉科", "检验科", "输血科", "心功能科", '护理部', '药学部', '其他'
+        ]
+
+        department = st.selectbox(
+            "选择所属科室*",
+            department_options,
+            key="department_select",
+            index=department_options.index(st.session_state.department_choice)
+        )
+
+        # 实时更新session state
+        st.session_state.department_choice = department
+
+    with col_dept2:
+        # 动态显示其他科室输入框或状态提示
+        if st.session_state.department_choice == '其他':
+            other_department = st.text_input(
+                "请填写具体科室名称*",
+                placeholder="请输入您的具体科室名称",
+                value=st.session_state.other_department_text,
+                key="other_department_input",
+                help="如果您选择的科室不在列表中，请在此填写具体科室名称"
+            )
+            # 实时更新session state
+            st.session_state.other_department_text = other_department
+
+            # 显示填写状态
+            if not other_department:
+                st.warning("⚠️ 请填写具体科室名称")
+            else:
+                st.success(f"✅ 已填写: **{other_department}**")
+        else:
+            other_department = ""
+            st.session_state.other_department_text = ""
+            # 添加一些垂直空间来与选择框对齐
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            st.success(f"✅ 已选择: **{st.session_state.department_choice}**")
+
+    # 显示当前选择的科室信息
+    if st.session_state.department_choice == '其他' and st.session_state.other_department_text:
+        st.info(f"**当前选择科室**: {st.session_state.other_department_text}")
+    else:
+        st.info(f"**当前选择科室**: {st.session_state.department_choice}")
+
+    # 第三个表单：确认提交（只有在所有信息都填写完整后才显示）
+    if (st.session_state.paper_info and
+            st.session_state.department_choice and
+            not (st.session_state.department_choice == '其他' and not st.session_state.other_department_text)):
+
+        st.markdown("---")
+        st.subheader("✅ 确认提交")
+
+        with st.form("confirmation_form"):
+            # 显示汇总信息
+            st.markdown("### 备案信息汇总")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.write(f"**论文标题**: {st.session_state.paper_info['paper_title']}")
+                st.write(f"**第一作者**: {st.session_state.paper_info['authors']}")
+                st.write(f"**通讯作者**: {st.session_state.paper_info['corresponding_author']}")
+
+            with col2:
+                st.write(f"**目标期刊**: {st.session_state.paper_info['target_journal']}")
+                st.write(f"**拟投稿日期**: {st.session_state.paper_info['planned_submission_date']}")
+
+                # 确定最终科室名称
+                final_department = (
+                    st.session_state.other_department_text
+                    if st.session_state.department_choice == '其他'
+                    else st.session_state.department_choice
+                )
+                st.write(f"**所属科室**: {final_department}")
+
+            st.markdown("**注意**: 带 * 的字段为必填项，请确认以上信息无误")
+
+            submitted = st.form_submit_button("🚀 提交备案申请")
+
+            if submitted:
+                # 调用处理函数
+                handle_submission(
+                    st.session_state.paper_info['paper_title'],
+                    st.session_state.paper_info['authors'],
+                    st.session_state.paper_info['corresponding_author'],
+                    st.session_state.department_choice,
+                    st.session_state.other_department_text,
+                    st.session_state.paper_info['target_journal'],
+                    st.session_state.paper_info['planned_submission_date']
+                )
+
+                # 清理session state
+                st.session_state.paper_info = {}
+                st.session_state.department_choice = "心内科"
+                st.session_state.other_department_text = ""
+
+                st.success("✅ 备案申请已提交！")
+    else:
+        # 显示缺少的信息提示
+        missing_fields = []
+        if not st.session_state.paper_info:
+            missing_fields.append("论文基本信息")
+        if not st.session_state.department_choice:
+            missing_fields.append("科室信息")
+        if st.session_state.department_choice == '其他' and not st.session_state.other_department_text:
+            missing_fields.append("具体科室名称")
+
+        if missing_fields:
+            st.info(f"📝 请先完善以下信息：{', '.join(missing_fields)}")
+
+
+def handle_submission(paper_title, authors, corresponding_author, department, other_department, target_journal,
+                      planned_submission_date):
+    """处理投稿备案"""
+    # 基本验证
+    if not all([paper_title, authors, corresponding_author, target_journal]):
+        st.error("❌ 请填写所有必填字段！")
+        return
+
+    # 从session state获取最新的科室信息
+    current_department = st.session_state.department_choice
+    current_other_department = st.session_state.other_department_text
+
+    # 如果选择了"其他"，必须填写具体科室
+    if current_department == '其他' and not current_other_department:
+        st.error("❌ 请填写具体科室名称！")
+        return
+
+    # 确定最终科室名称
+    final_department = current_other_department if current_department == '其他' else current_department
+
+    # 检查期刊是否在预警列表中
+    journal_match = st.session_state.warning_journals[
+        st.session_state.warning_journals['期刊名称'].str.lower() == target_journal.lower()
+        ]
+
+    # 生成备案ID
+    record_id = f"BA{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+    submission_data = {
+        '备案ID': record_id,
+        '论文标题': paper_title,
+        '第一作者': authors,
+        '目标期刊': target_journal,
+        '通讯作者': corresponding_author,
+        '所属科室': final_department,  # 使用最终确定的科室名称
+        '提交时间': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        '预警状态': '历年预警期刊' if not journal_match.empty else '安全',
+        '提交用户ID': st.session_state.user_id,  # 记录提交者
+        '提交用户角色': st.session_state.user_role  # 记录用户角色
+    }
+
+    if not journal_match.empty:
+        st.error("⚠️ **预警提醒**")
+        st.write(f"您选择的期刊 **'{target_journal}'** 在以下预警列表中：")
+        st.dataframe(journal_match, use_container_width=True)
+        st.error("❌ **您的备案申请已被驳回**")
+
+        # 修改重要提示：加大字体并改为红色，前面加星号
+        # 更醒目的重要提示样式
+        st.markdown(
+            """
+            <div style='
+                color: #d32f2f; 
+                font-size: 22px; 
+                font-weight: bold; 
+                padding: 20px; 
+                border: 3px solid #d32f2f; 
+                border-radius: 8px; 
+                background-color: #ffebee;
+                margin: 15px 0;
+                text-align: center;
+            '>
+            ⭐⭐⭐ <strong>重要提示</strong> ⭐⭐⭐<br>
+            在此期刊上发表论文将无法报销并奖励，请改投其他期刊
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        submission_data['状态'] = '审核驳回'
+        submission_data['审核意见'] = '历年预警期刊，不予报销奖励，请改投其他期刊'
+        submission_data['审核人'] = '科研办'
+        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    else:
+        st.success("✅ **期刊校验通过，备案已自动完成！**")
+        submission_data['状态'] = '审核通过'
+        submission_data['审核意见'] = '无预警，自动通过，可投稿'
+        submission_data['审核人'] = '科研办'
+        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 保存提交记录
+    st.session_state.submissions.append(submission_data)
+    save_submissions()  # 立即保存到文件
+
+    # 显示提交摘要
+    st.markdown("---")
+    st.subheader("备案信息摘要")
+    summary_data = {k: v for k, v in submission_data.items() if k not in ['提交用户ID', '提交用户角色']}
+    summary_df = pd.DataFrame([summary_data])
+    st.dataframe(summary_df, use_container_width=True)
 
 
 def show_my_submissions():
@@ -310,145 +649,7 @@ def show_my_submissions():
     st.write(f"显示 **{len(filtered_df)}** 条记录：")
     st.dataframe(filtered_df, use_container_width=True)
 
-    # 导出功能
-    if len(filtered_df) > 0:
-        csv = filtered_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-        st.download_button(
-            label="📥 导出我的备案记录",
-            data=csv,
-            file_name=f"我的备案记录_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
-        )
 
-
-def show_submission_interface():
-    """投稿备案界面"""
-    st.header("论文投稿备案")
-
-    with st.form("submission_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            paper_title = st.text_input("论文标题*", placeholder="请输入完整的论文标题")
-            authors = st.text_area("第一作者*", placeholder="第一作者姓名")
-            corresponding_author = st.text_input("通讯作者*", placeholder="通讯作者姓名")
-            department = st.selectbox("所属科室*", [
-                "心内科", "心外科", "超声科", "放射科", "体外循环科",
-                "麻醉科", "检验科", "输血科", "心功能科", '护理', '其他'
-            ])
-
-        with col2:
-            target_journal = st.text_input("目标期刊名称*", placeholder="请输入完整的期刊名称")
-            planned_submission_date = st.date_input("拟投稿日期", datetime.date.today())
-
-        st.markdown("**注意**: 带 * 的字段为必填项")
-        submitted = st.form_submit_button("🚀 提交备案申请")
-
-        if submitted:
-            handle_submission(paper_title, authors, corresponding_author,
-                              department, target_journal, planned_submission_date)
-
-
-def handle_submission(paper_title, authors, corresponding_author, department, target_journal, planned_submission_date):
-    """处理投稿备案"""
-    # 基本验证
-    if not all([paper_title, authors, corresponding_author, department, target_journal]):
-        st.error("❌ 请填写所有必填字段！")
-        return
-
-    # 检查期刊是否在预警列表中
-    journal_match = st.session_state.warning_journals[
-        st.session_state.warning_journals['期刊名称'].str.lower() == target_journal.lower()
-        ]
-
-    # 生成备案ID
-    record_id = f"BA{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-    submission_data = {
-        '备案ID': record_id,
-        '论文标题': paper_title,
-        '第一作者': authors,
-        '目标期刊': target_journal,
-        '通讯作者': corresponding_author,
-        '所属科室': department,
-        '提交时间': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        '预警状态': '历年预警期刊' if not journal_match.empty else '安全',
-        '提交用户ID': st.session_state.user_id,  # 记录提交者
-        '提交用户角色': st.session_state.user_role  # 记录用户角色
-    }
-
-    if not journal_match.empty:
-        st.error("⚠️ **预警提醒**")
-        st.write(f"您选择的期刊 **'{target_journal}'** 在以下预警列表中：")
-        st.dataframe(journal_match, use_container_width=True)
-        st.error("❌ **您的备案申请已被驳回**")
-        st.warning("**重要提示**: 在此期刊上发表论文将无法报销并奖励，请改投其他期刊。")
-
-        submission_data['状态'] = '审核驳回'
-        submission_data['审核意见'] = '历年预警期刊，不予报销奖励，请改投其他期刊'
-        submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    else:
-        st.success("✅ **期刊校验通过，备案已自动完成！**")
-        submission_data['状态'] = '审核通过'
-        submission_data['审核意见'] = '无预警，自动通过，可投稿'
-        submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # 保存提交记录
-    st.session_state.submissions.append(submission_data)
-    save_submissions()  # 立即保存到文件
-
-    # 显示提交摘要
-    st.markdown("---")
-    st.subheader("备案信息摘要")
-    summary_data = {k: v for k, v in submission_data.items() if k not in ['提交用户ID', '提交用户角色']}
-    summary_df = pd.DataFrame([summary_data])
-    st.dataframe(summary_df, use_container_width=True)
-
-
-def show_journal_search_interface():
-    """期刊查询界面"""
-    st.header("预警期刊查询")
-
-    # 搜索功能
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        search_term = st.text_input("🔍 搜索期刊名称", placeholder="输入期刊名称关键词")
-
-    with col2:
-        search_type = st.selectbox("查询方式", ["精确查询"])
-
-    # 筛选数据
-    display_df = st.session_state.warning_journals.copy()
-
-    if search_term:
-        if search_type == "精确查询":
-            display_df = display_df[
-                display_df['期刊名称'].str.strip().str.lower() == search_term.strip().lower()
-                ]
-        else:
-            display_df = display_df[
-                display_df['期刊名称'].str.contains(search_term, case=False, na=False)
-            ]
-
-    # 显示结果
-    if len(display_df) > 0:
-        st.write(f"找到 **{len(display_df)}** 条相关记录：")
-        st.dataframe(display_df, use_container_width=True)
-
-        # 提供导出功能
-        csv = display_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 导出查询结果(CSV)",
-            data=csv,
-            file_name=f"预警期刊查询结果_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
-        )
-    else:
-        st.info("未找到匹配的预警期刊记录")
 
 
 def show_admin_interface():
@@ -500,6 +701,7 @@ def show_review_record(record, index):
 
         with col1:
             st.write(f"**备案ID**: {record['备案ID']}")
+            st.write(f"**论文标题**: {record['论文标题']}")
             st.write(f"**目标期刊**: {record['目标期刊']}")
             st.write(f"**第一作者**: {record['第一作者']}")
             st.write(f"**通讯作者**: {record['通讯作者']}")
