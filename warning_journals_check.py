@@ -262,15 +262,9 @@ def management_functions():
         st.subheader("📊 系统统计")
         st.write(f"预警期刊数量: **{len(st.session_state.warning_journals)}** 种")
 
-        # 根据用户角色显示不同的备案数量
-        if st.session_state.user_role == "科研办审核员":
-            # 审核员看到总备案数
-            total_count = len(st.session_state.submissions)
-            st.write(f"总备案数量: **{total_count}** 条")
-        else:
-            # 科研人员只看到自己的备案数
-            my_count = len([s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id])
-            st.write(f"我的备案数量: **{my_count}** 条")
+        # 备案数量统计 - 审核员看到总备案数
+        total_count = len(st.session_state.submissions)
+        st.write(f"总备案数量: **{total_count}** 条")
 
         # 审核统计（仅科研办可见）
         if st.session_state.user_role == "科研办审核员" and st.session_state.submissions:
@@ -282,7 +276,6 @@ def management_functions():
             st.write(f"待审核: **{pending_count}** 条")
             st.write(f"已通过: **{approved_count}** 条")
             st.write(f"已驳回: **{rejected_count}** 条")
-
 
 # ==================== 主应用功能 ====================
 def main_application():
@@ -615,19 +608,43 @@ def show_my_submissions():
     """显示当前用户的备案记录"""
     st.header("我的备案记录")
 
-    # 过滤出当前用户的记录
-    user_submissions = [s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id]
+    # 根据用户角色决定显示哪些记录
+    if st.session_state.user_role == "科研办审核员":
+        # 审核员可以看到所有记录
+        user_submissions = st.session_state.submissions
+        st.write(f"🔍 **审核员视图** - 共 **{len(user_submissions)}** 条备案记录：")
+    else:
+        # 科研人员只能看到自己的记录
+        user_submissions = [s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id]
+        st.write(f"您共有 **{len(user_submissions)}** 条备案记录：")
 
     if not user_submissions:
-        st.info("您还没有提交过备案记录")
+        if st.session_state.user_role == "科研办审核员":
+            st.info("暂无任何备案记录")
+        else:
+            st.info("您还没有提交过备案记录")
         return
 
-    st.write(f"您共有 **{len(user_submissions)}** 条备案记录：")
-
-    # 转换为DataFrame显示，隐藏用户ID字段
+    # 转换为DataFrame显示
     display_data = []
     for submission in user_submissions:
-        display_item = {k: v for k, v in submission.items() if k not in ['提交用户ID', '提交用户角色']}
+        display_item = {
+            '备案ID': submission.get('备案ID', ''),
+            '论文标题': submission.get('论文标题', ''),
+            '第一作者': submission.get('第一作者', ''),
+            '目标期刊': submission.get('目标期刊', ''),
+            '通讯作者': submission.get('通讯作者', ''),
+            '所属科室': submission.get('所属科室', ''),
+            '提交时间': submission.get('提交时间', ''),
+            '预警状态': submission.get('预警状态', ''),
+            '状态': submission.get('状态', ''),
+            '审核意见': submission.get('审核意见', '')
+        }
+
+        # 如果是审核员，显示提交者信息
+        if st.session_state.user_role == "科研办审核员":
+            display_item['提交者'] = submission.get('提交用户角色', '未知')
+
         display_data.append(display_item)
 
     df = pd.DataFrame(display_data)
@@ -672,7 +689,9 @@ def show_review_interface():
     else:
         # 审核员可以看到所有记录
         records_df = pd.DataFrame(st.session_state.submissions)
+        st.write(f"🔍 **审核员视图** - 共 **{len(records_df)}** 条备案记录")
 
+        # 原有的筛选和显示代码...
         # 添加筛选选项
         col1, col2 = st.columns(2)
         with col1:
