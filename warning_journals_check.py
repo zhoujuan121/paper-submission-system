@@ -180,40 +180,43 @@ def create_sample_journals():
 # ==================== 登录系统 ====================
 def login_system():
     """登录系统界面"""
-    with st.sidebar:
-        st.header("🔐 系统登录")
+    try:
+        with st.sidebar:
+            st.header("🔐 系统登录")
 
-        # 显示当前身份
-        if st.session_state.user_role == "科研办审核员":
-            st.success("✅ 当前身份：科研办审核员")
-            if st.button("🔁 切换至科研人员身份"):
-                st.session_state.user_role = "科研人员"
-                st.session_state.is_authenticated = True
-                st.session_state.current_user = "科研人员"
-                st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                st.rerun()
-        else:
-            st.success("👤 当前身份：科研人员")
-            if st.button("🔐 管理员登录"):
-                st.session_state.show_admin_login = True
+            # 显示当前身份
+            if st.session_state.user_role == "科研办审核员":
+                st.success("✅ 当前身份：科研办审核员")
+                if st.button("🔁 切换至科研人员身份"):
+                    st.session_state.user_role = "科研人员"
+                    st.session_state.is_authenticated = True
+                    st.session_state.current_user = "科研人员"
+                    st.session_state.user_id = str(datetime.datetime.now().timestamp())
+                    st.experimental_rerun()
+            else:
+                st.success("👤 当前身份：科研人员")
+                if st.button("🔐 管理员登录"):
+                    st.session_state.show_admin_login = True
 
-            # 管理员登录表单
-            if st.session_state.show_admin_login:
-                st.markdown("---")
-                st.subheader("管理员登录")
+                # 管理员登录表单
+                if st.session_state.show_admin_login:
+                    st.markdown("---")
+                    st.subheader("管理员登录")
 
-                password = st.text_input(
-                    "请输入管理员密码",
-                    type="password",
-                    placeholder="输入管理员密码"
-                )
+                    password = st.text_input(
+                        "请输入管理员密码",
+                        type="password",
+                        placeholder="输入管理员密码"
+                    )
 
-                if st.button("✅ 验证身份"):
-                    handle_admin_login(password)
+                    if st.button("✅ 验证身份"):
+                        handle_admin_login(password)
 
-                if st.button("❌ 取消"):
-                    st.session_state.show_admin_login = False
-                    st.rerun()
+                    if st.button("❌ 取消"):
+                        st.session_state.show_admin_login = False
+                        st.experimental_rerun()
+    except Exception as e:
+        st.sidebar.error(f"侧边栏错误: {e}")
 
 
 def handle_admin_login(password):
