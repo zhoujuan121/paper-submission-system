@@ -589,14 +589,14 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         submission_data['状态'] = '审核驳回'
         submission_data['审核意见'] = '历年预警期刊，不予报销奖励，请改投其他期刊'
         submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        submission_data['审核时间'] = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
 
     else:
         st.success("✅ **期刊校验通过，备案已自动完成！**")
         submission_data['状态'] = '审核通过'
         submission_data['审核意见'] = '无预警，自动通过，可投稿'
         submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        submission_data['审核时间'] = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
 
     # 保存提交记录
     st.session_state.submissions.append(submission_data)
