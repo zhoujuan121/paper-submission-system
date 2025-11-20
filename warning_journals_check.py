@@ -542,6 +542,9 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
     # 生成备案ID
     record_id = f"BA{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
 
+    utc_time = datetime.datetime.utcnow()
+    beijing_time = utc_time + datetime.timedelta(hours=8)
+
     submission_data = {
         '备案ID': record_id,
         '论文标题': paper_title,
@@ -549,7 +552,7 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         '目标期刊': target_journal,
         '通讯作者': corresponding_author,
         '所属科室': final_department,  # 使用最终确定的科室名称
-        '提交时间': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        '提交时间': beijing_time.strftime("%Y-%m-%d %H:%M:%S"),
         '预警状态': '历年预警期刊' if not journal_match.empty else '安全',
         '提交用户ID': st.session_state.user_id,  # 记录提交者
         '提交用户角色': st.session_state.user_role  # 记录用户角色
