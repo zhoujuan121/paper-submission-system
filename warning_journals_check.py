@@ -192,7 +192,7 @@ def login_system():
                     st.session_state.is_authenticated = True
                     st.session_state.current_user = "科研人员"
                     st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                    st.experimental_rerun()
+                    st.rerun()  # 修复：替换为 st.rerun()
             else:
                 st.success("👤 当前身份：科研人员")
                 if st.button("🔐 管理员登录"):
@@ -214,7 +214,7 @@ def login_system():
 
                     if st.button("❌ 取消"):
                         st.session_state.show_admin_login = False
-                        st.experimental_rerun()
+                        st.rerun()  # 修复：替换为 st.rerun()
     except Exception as e:
         st.sidebar.error(f"侧边栏错误: {e}")
 
