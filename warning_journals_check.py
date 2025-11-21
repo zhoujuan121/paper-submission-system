@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import os
 import json
+import atexit
 
 # 页面配置 - 必须放在最前面！
 st.set_page_config(
@@ -70,11 +71,18 @@ tab_style_complete = """
 st.markdown(tab_style_complete, unsafe_allow_html=True)
 
 # ==================== 数据持久化函数 ====================
+
+# 注册退出时的自动保存
+atexit.register(save_submissions)
+
+# 增强保存函数
 def save_submissions():
     """保存备案数据到本地文件"""
     try:
         with open('submissions_data.json', 'w', encoding='utf-8') as f:
             json.dump(st.session_state.submissions, f, ensure_ascii=False, indent=2)
+        # 记录保存时间
+        st.session_state.last_save_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
         st.error(f"保存数据失败: {e}")
 
@@ -177,6 +185,26 @@ def create_sample_journals():
     return pd.DataFrame(sample_data)
 
 
+def show_data_status():
+    """显示数据状态"""
+    with st.sidebar:
+        st.markdown("---")
+        st.subheader("📊 数据状态")
+
+        total_count = len(st.session_state.submissions)
+        st.write(f"备案记录: **{total_count}** 条")
+
+        if 'last_save_time' in st.session_state:
+            st.write(f"最后保存: {st.session_state.last_save_time}")
+
+        # 数据备份提醒
+        if total_count > 0:
+            st.download_button(
+                label="💾 备份数据",
+                data=json.dumps(st.session_state.submissions, ensure_ascii=False, indent=2),
+                file_name=f"备案数据备份_{datetime.datetime.now().strftime('%Y%m%d')}.json",
+                mime='application/json',
+            )
 # ==================== 登录系统 ====================
 def login_system():
     """登录系统界面"""
@@ -826,6 +854,9 @@ def main():
     """主程序"""
     # 初始化会话状态
     init_session_state()
+
+    # 显示数据状态
+    show_data_status()
 
     # 执行登录系统
     login_system()
