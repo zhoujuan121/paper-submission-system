@@ -5,6 +5,8 @@ import hashlib
 import os
 import json
 import atexit
+import sqlite3
+import base64
 
 # 页面配置 - 必须放在最前面！
 st.set_page_config(
@@ -70,32 +72,284 @@ tab_style_complete = """
 
 st.markdown(tab_style_complete, unsafe_allow_html=True)
 
-# ==================== 数据持久化函数 ====================
 
-# 增强保存函数
+# ==================== 增强的数据持久化方案 ====================
+
+class DatabaseManager:
+    """数据库管理器 - 提供持久化数据存储"""
+
+    def __init__(self, db_path='submissions.db'):
+        self.db_path = db_path
+        self.init_database()
+
+    def init_database(self):
+        """初始化数据库表结构"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        # 创建投稿备案表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                record_id TEXT UNIQUE,
+                paper_title TEXT NOT NULL,
+                authors TEXT NOT NULL,
+                corresponding_author TEXT NOT NULL,
+                department TEXT NOT NULL,
+                target_journal TEXT NOT NULL,
+                planned_submission_date TEXT,
+                submission_time TEXT NOT NULL,
+                warning_status TEXT NOT NULL,
+                status TEXT NOT NULL,
+                review_comment TEXT,
+                reviewer TEXT,
+                review_time TEXT,
+                user_id TEXT NOT NULL,
+                user_role TEXT NOT NULL
+            )
+        ''')
+
+        # 创建预警期刊表
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS warning_journals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                journal_name TEXT UNIQUE NOT NULL,
+                warning_year INTEGER,
+                warning_source TEXT
+            )
+        ''')
+
+        conn.commit()
+        conn.close()
+
+    def save_submission(self, submission_data):
+        """保存投稿备案记录"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute('''
+                INSERT INTO submissions 
+                (record_id, paper_title, authors, corresponding_author, department, 
+                 target_journal, planned_submission_date, submission_time, warning_status,
+                 status, review_comment, reviewer, review_time, user_id, user_role)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                submission_data['备案ID'],
+                submission_data['论文标题'],
+                submission_data['第一作者'],
+                submission_data['通讯作者'],
+                submission_data['所属科室'],
+                submission_data['目标期刊'],
+                submission_data.get('拟投稿日期', ''),
+                submission_data['提交时间'],
+                submission_data['预警状态'],
+                submission_data['状态'],
+                submission_data.get('审核意见', ''),
+                submission_data.get('审核人', ''),
+                submission_data.get('审核时间', ''),
+                submission_data['提交用户ID'],
+                submission_data['提交用户角色']
+            ))
+
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            # 记录已存在，更新记录
+            cursor.execute('''
+                UPDATE submissions SET
+                paper_title=?, authors=?, corresponding_author=?, department=?,
+                target_journal=?, planned_submission_date=?, submission_time=?,
+                warning_status=?, status=?, review_comment=?, reviewer=?, review_time=?,
+                user_id=?, user_role=?
+                WHERE record_id=?
+            ''', (
+                submission_data['论文标题'],
+                submission_data['第一作者'],
+                submission_data['通讯作者'],
+                submission_data['所属科室'],
+                submission_data['目标期刊'],
+                submission_data.get('拟投稿日期', ''),
+                submission_data['提交时间'],
+                submission_data['预警状态'],
+                submission_data['状态'],
+                submission_data.get('审核意见', ''),
+                submission_data.get('审核人', ''),
+                submission_data.get('审核时间', ''),
+                submission_data['提交用户ID'],
+                submission_data['提交用户角色'],
+                submission_data['备案ID']
+            ))
+
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            st.error(f"保存数据失败: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def load_submissions(self, user_id=None, user_role=None):
+        """加载投稿备案记录"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            if user_role == "科研办审核员":
+                # 审核员可以看到所有记录
+                cursor.execute('SELECT * FROM submissions ORDER BY submission_time DESC')
+            else:
+                # 科研人员只能看到自己的记录
+                cursor.execute('''
+                    SELECT * FROM submissions 
+                    WHERE user_id = ? 
+                    ORDER BY submission_time DESC
+                ''', (user_id,))
+
+            columns = [col[0] for col in cursor.description]
+            rows = cursor.fetchall()
+
+            submissions = []
+            for row in rows:
+                submission = dict(zip(columns, row))
+                # 转换为前端需要的格式
+                submissions.append({
+                    '备案ID': submission['record_id'],
+                    '论文标题': submission['paper_title'],
+                    '第一作者': submission['authors'],
+                    '通讯作者': submission['corresponding_author'],
+                    '所属科室': submission['department'],
+                    '目标期刊': submission['target_journal'],
+                    '拟投稿日期': submission['planned_submission_date'],
+                    '提交时间': submission['submission_time'],
+                    '预警状态': submission['warning_status'],
+                    '状态': submission['status'],
+                    '审核意见': submission['review_comment'],
+                    '审核人': submission['reviewer'],
+                    '审核时间': submission['review_time'],
+                    '提交用户ID': submission['user_id'],
+                    '提交用户角色': submission['user_role']
+                })
+
+            return submissions
+        except Exception as e:
+            st.error(f"加载数据失败: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def save_warning_journals(self, journals_df):
+        """保存预警期刊数据"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            # 清空现有数据
+            cursor.execute('DELETE FROM warning_journals')
+
+            # 插入新数据
+            for _, row in journals_df.iterrows():
+                cursor.execute('''
+                    INSERT INTO warning_journals (journal_name, warning_year, warning_source)
+                    VALUES (?, ?, ?)
+                ''', (
+                    row['期刊名称'],
+                    row.get('预警年份', 2023),
+                    row.get('预警来源', '中科院预警')
+                ))
+
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            st.error(f"保存预警期刊失败: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def load_warning_journals(self):
+        """加载预警期刊数据"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute('SELECT journal_name, warning_year, warning_source FROM warning_journals')
+            rows = cursor.fetchall()
+
+            if rows:
+                journals_df = pd.DataFrame(rows, columns=['期刊名称', '预警年份', '预警来源'])
+                return journals_df
+            else:
+                return create_sample_journals()
+        except Exception as e:
+            st.error(f"加载预警期刊失败: {e}")
+            return create_sample_journals()
+        finally:
+            conn.close()
+
+    def get_statistics(self):
+        """获取统计信息"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            # 总备案数
+            cursor.execute('SELECT COUNT(*) FROM submissions')
+            total_count = cursor.fetchone()[0]
+
+            # 各状态数量
+            cursor.execute('SELECT status, COUNT(*) FROM submissions GROUP BY status')
+            status_counts = dict(cursor.fetchall())
+
+            # 各科室数量
+            cursor.execute('SELECT department, COUNT(*) FROM submissions GROUP BY department')
+            dept_counts = dict(cursor.fetchall())
+
+            # 预警期刊数量
+            cursor.execute('SELECT COUNT(*) FROM warning_journals')
+            warning_count = cursor.fetchone()[0]
+
+            return {
+                'total_count': total_count,
+                'status_counts': status_counts,
+                'dept_counts': dept_counts,
+                'warning_count': warning_count
+            }
+        except Exception as e:
+            st.error(f"获取统计信息失败: {e}")
+            return {}
+        finally:
+            conn.close()
+
+
+# 全局数据库管理器实例
+db_manager = DatabaseManager()
+
+
+# 增强保存函数 - 现在使用数据库
 def save_submissions():
-    """保存备案数据到本地文件"""
+    """保存备案数据到数据库"""
     try:
-        with open('submissions_data.json', 'w', encoding='utf-8') as f:
-            json.dump(st.session_state.submissions, f, ensure_ascii=False, indent=2)
-        # 记录保存时间
+        # 数据现在实时保存到数据库，这里主要更新session state
+        if 'submissions' in st.session_state:
+            # 确保session state与数据库同步
+            st.session_state.submissions = db_manager.load_submissions(
+                st.session_state.user_id,
+                st.session_state.user_role
+            )
         st.session_state.last_save_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
         st.error(f"保存数据失败: {e}")
 
+
 # 注册退出时的自动保存 - 移到函数定义之后
 atexit.register(save_submissions)
 
+
 def load_submissions():
-    """从本地文件加载备案数据"""
-    try:
-        with open('submissions_data.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []  # 文件不存在时返回空列表
-    except Exception as e:
-        st.error(f"加载数据失败: {e}")
-        return []
+    """从数据库加载备案数据"""
+    return db_manager.load_submissions(st.session_state.user_id, st.session_state.user_role)
 
 
 # ==================== 安全配置函数 ====================
@@ -122,46 +376,28 @@ def init_session_state():
     if 'user_role' not in st.session_state:
         st.session_state.user_role = "科研人员"
     if 'is_authenticated' not in st.session_state:
-        st.session_state.is_authenticated = True  # 修改：默认已登录
+        st.session_state.is_authenticated = True
     if 'submissions' not in st.session_state:
         st.session_state.submissions = load_submissions()
     if 'warning_journals' not in st.session_state:
-        init_warning_journals()
+        st.session_state.warning_journals = db_manager.load_warning_journals()
     if 'show_admin_login' not in st.session_state:
         st.session_state.show_admin_login = False
     if 'current_user' not in st.session_state:
-        st.session_state.current_user = "科研人员"  # 修改：默认用户
+        st.session_state.current_user = "科研人员"
     if 'user_id' not in st.session_state:
-        st.session_state.user_id = str(datetime.datetime.now().timestamp())
+        # 生成更稳定的用户ID（基于时间戳和随机数）
+        st.session_state.user_id = f"user_{int(datetime.datetime.now().timestamp())}_{hashlib.md5(str(os.urandom(8)).encode()).hexdigest()[:8]}"
     if 'last_save_time' not in st.session_state:
         st.session_state.last_save_time = "尚未保存"
+    if 'db_initialized' not in st.session_state:
+        st.session_state.db_initialized = True
 
 
 def init_warning_journals():
-    """初始化预警期刊数据"""
-    try:
-        # 尝试多种编码方式读取CSV文件
-        encodings = ['utf-8', 'gbk', 'gb2312', 'latin1', 'cp1252']
+    """初始化预警期刊数据 - 现在从数据库加载"""
+    st.session_state.warning_journals = db_manager.load_warning_journals()
 
-        for encoding in encodings:
-            try:
-                df = pd.read_csv('warning_journals_20251117.csv', encoding=encoding)
-                df_cleaned = clean_dataframe(df)
-                if not df_cleaned.empty:
-                    st.session_state.warning_journals = df_cleaned
-                    return
-            except (UnicodeDecodeError, LookupError):
-                continue
-            except Exception as e:
-                continue
-
-        # 如果所有编码都失败，使用示例数据
-        st.session_state.warning_journals = create_sample_journals()
-        st.warning("⚠️ 无法读取CSV文件，使用示例数据")
-
-    except FileNotFoundError:
-        st.session_state.warning_journals = create_sample_journals()
-        st.info("📝 使用示例预警期刊数据，请上传CSV文件")
 
 def clean_dataframe(df):
     """清理数据框"""
@@ -191,13 +427,17 @@ def show_data_status():
         st.markdown("---")
         st.subheader("📊 数据状态")
 
-        total_count = len(st.session_state.submissions)
+        stats = db_manager.get_statistics()
+        total_count = stats.get('total_count', 0)
+        warning_count = stats.get('warning_count', 0)
+
         st.write(f"备案记录: **{total_count}** 条")
+        st.write(f"预警期刊: **{warning_count}** 种")
 
         if 'last_save_time' in st.session_state:
-            st.write(f"最后保存: {st.session_state.last_save_time}")
+            st.write(f"最后同步: {st.session_state.last_save_time}")
 
-        # 数据备份提醒
+        # 数据备份功能
         if total_count > 0:
             st.download_button(
                 label="💾 备份数据",
@@ -205,6 +445,7 @@ def show_data_status():
                 file_name=f"备案数据备份_{datetime.datetime.now().strftime('%Y%m%d')}.json",
                 mime='application/json',
             )
+
 
 # ==================== 登录系统 ====================
 def login_system():
@@ -220,7 +461,8 @@ def login_system():
                     st.session_state.user_role = "科研人员"
                     st.session_state.is_authenticated = True
                     st.session_state.current_user = "科研人员"
-                    st.session_state.user_id = str(datetime.datetime.now().timestamp())
+                    st.session_state.user_id = f"user_{int(datetime.datetime.now().timestamp())}_{hashlib.md5(str(os.urandom(8)).encode()).hexdigest()[:8]}"
+                    st.session_state.submissions = load_submissions()  # 重新加载数据
                     st.rerun()
             else:
                 st.success("👤 当前身份：科研人员")
@@ -258,6 +500,7 @@ def handle_admin_login(password):
         st.session_state.is_authenticated = True
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
+        st.session_state.submissions = load_submissions()  # 重新加载所有数据
         st.success("✅ 管理员身份验证成功！")
         st.rerun()
     else:
@@ -280,8 +523,9 @@ def management_functions():
                 try:
                     df = pd.read_csv(uploaded_file)
                     df_cleaned = clean_dataframe(df)
-                    st.session_state.warning_journals = df_cleaned
-                    st.success(f"✅ 成功更新预警期刊库！共 {len(df_cleaned)} 条记录。")
+                    if db_manager.save_warning_journals(df_cleaned):
+                        st.session_state.warning_journals = db_manager.load_warning_journals()
+                        st.success(f"✅ 成功更新预警期刊库！共 {len(df_cleaned)} 条记录。")
                 except Exception as e:
                     st.error(f"❌ 文件读取错误: {e}")
         else:
@@ -291,28 +535,27 @@ def management_functions():
         # 显示统计信息
         st.markdown("---")
         st.subheader("📊 系统统计")
-        st.write(f"预警期刊数量: **{len(st.session_state.warning_journals)}** 种")
+        stats = db_manager.get_statistics()
 
-        # 备案数量统计 - 审核员看到总备案数
-        total_count = len(st.session_state.submissions)
-        st.write(f"总备案数量: **{total_count}** 条")
+        st.write(f"预警期刊数量: **{stats.get('warning_count', 0)}** 种")
+        st.write(f"总备案数量: **{stats.get('total_count', 0)}** 条")
 
         # 审核统计（仅科研办可见）
-        if st.session_state.user_role == "科研办审核员" and st.session_state.submissions:
-            records_df = pd.DataFrame(st.session_state.submissions)
-            pending_count = len(records_df[records_df['状态'] == '待审核'])
-            approved_count = len(records_df[records_df['状态'] == '审核通过'])
-            rejected_count = len(records_df[records_df['状态'] == '审核驳回'])
+        if st.session_state.user_role == "科研办审核员":
+            status_counts = stats.get('status_counts', {})
+            st.write(f"待审核: **{status_counts.get('待审核', 0)}** 条")
+            st.write(f"已通过: **{status_counts.get('审核通过', 0)}** 条")
+            st.write(f"已驳回: **{status_counts.get('审核驳回', 0)}** 条")
 
-            st.write(f"待审核: **{pending_count}** 条")
-            st.write(f"已通过: **{approved_count}** 条")
-            st.write(f"已驳回: **{rejected_count}** 条")
 
 # ==================== 主应用功能 ====================
 def main_application():
     """主应用界面"""
     # 应用标题和描述
     st.title("📚 论文投稿备案与期刊预警系统")
+
+    # 显示数据持久化状态
+    st.sidebar.success("💾 数据已持久化保存")
 
     # 直接显示科研人员界面，跳过欢迎页面
     if st.session_state.user_role == "科研人员":
@@ -333,6 +576,7 @@ def show_researcher_interface():
 
     with tab3:
         show_my_submissions()
+
 
 def show_journal_search_interface():
     """期刊查询界面"""
@@ -400,7 +644,7 @@ def show_submission_interface():
         paper_title = st.text_input("论文标题*", placeholder="请输入完整的论文标题",
                                     value=st.session_state.paper_info.get('paper_title', ''))
         authors = st.text_input("第一作者*", placeholder="第一作者姓名",
-                               value=st.session_state.paper_info.get('authors', ''))
+                                value=st.session_state.paper_info.get('authors', ''))
         corresponding_author = st.text_input("通讯作者*", placeholder="通讯作者姓名",
                                              value=st.session_state.paper_info.get('corresponding_author', ''))
 
@@ -579,11 +823,12 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         '第一作者': authors,
         '目标期刊': target_journal,
         '通讯作者': corresponding_author,
-        '所属科室': final_department,  # 使用最终确定的科室名称
+        '所属科室': final_department,
+        '拟投稿日期': str(planned_submission_date),
         '提交时间': beijing_time.strftime("%Y-%m-%d %H:%M:%S"),
         '预警状态': '历年预警期刊' if not journal_match.empty else '安全',
-        '提交用户ID': st.session_state.user_id,  # 记录提交者
-        '提交用户角色': st.session_state.user_role  # 记录用户角色
+        '提交用户ID': st.session_state.user_id,
+        '提交用户角色': st.session_state.user_role
     }
 
     if not journal_match.empty:
@@ -592,8 +837,7 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         st.dataframe(journal_match, use_container_width=True)
         st.error("❌ **您的备案申请已被驳回**")
 
-        # 修改重要提示：加大字体并改为红色，前面加星号
-        # 更醒目的重要提示样式
+        # 重要提示样式
         st.markdown(
             """
             <div style='
@@ -626,16 +870,20 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         submission_data['审核人'] = '科研办'
         submission_data['审核时间'] = beijing_time.strftime("%Y-%m-%d %H:%M:%S")
 
-    # 保存提交记录
-    st.session_state.submissions.append(submission_data)
-    save_submissions()  # 立即保存到文件
+    # 保存提交记录到数据库
+    if db_manager.save_submission(submission_data):
+        # 更新session state
+        st.session_state.submissions = load_submissions()
+        save_submissions()  # 更新保存时间
 
-    # 显示提交摘要
-    st.markdown("---")
-    st.subheader("备案信息摘要")
-    summary_data = {k: v for k, v in submission_data.items() if k not in ['提交用户ID', '提交用户角色']}
-    summary_df = pd.DataFrame([summary_data])
-    st.dataframe(summary_df, use_container_width=True)
+        # 显示提交摘要
+        st.markdown("---")
+        st.subheader("备案信息摘要")
+        summary_data = {k: v for k, v in submission_data.items() if k not in ['提交用户ID', '提交用户角色']}
+        summary_df = pd.DataFrame([summary_data])
+        st.dataframe(summary_df, use_container_width=True)
+    else:
+        st.error("❌ 提交失败，请重试")
 
 
 def show_my_submissions():
@@ -701,8 +949,6 @@ def show_my_submissions():
     st.dataframe(filtered_df, use_container_width=True)
 
 
-
-
 def show_admin_interface():
     """科研办审核员界面"""
     tab1, tab2 = st.tabs(["🔍 备案审核", "📊 审核统计"])
@@ -722,160 +968,4 @@ def show_review_interface():
         st.info("暂无备案记录")
     else:
         # 审核员可以看到所有记录
-        records_df = pd.DataFrame(st.session_state.submissions)
-        st.write(f"🔍 **审核员视图** - 共 **{len(records_df)}** 条备案记录")
-
-        # 原有的筛选和显示代码...
-        # 添加筛选选项
-        col1, col2 = st.columns(2)
-        with col1:
-            status_filter = st.selectbox("按状态筛选", ["全部", "待审核", "审核通过", "审核驳回"])
-        with col2:
-            dept_filter = st.selectbox("按科室筛选", ["全部"] + list(records_df['所属科室'].unique()))
-
-        # 应用筛选
-        filtered_df = records_df.copy()
-        if status_filter != "全部":
-            filtered_df = filtered_df[filtered_df['状态'] == status_filter]
-        if dept_filter != "全部":
-            filtered_df = filtered_df[filtered_df['所属科室'] == dept_filter]
-
-        st.write(f"显示 **{len(filtered_df)}** 条备案记录：")
-
-        # 逐条显示记录
-        for idx, record in filtered_df.iterrows():
-            show_review_record(record, idx)
-
-
-def show_review_record(record, index):
-    """显示单条审核记录"""
-    with st.expander(f"{record['论文标题']} - {record['状态']}", expanded=True):
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            st.write(f"**备案ID**: {record['备案ID']}")
-            st.write(f"**论文标题**: {record['论文标题']}")
-            st.write(f"**目标期刊**: {record['目标期刊']}")
-            st.write(f"**第一作者**: {record['第一作者']}")
-            st.write(f"**通讯作者**: {record['通讯作者']}")
-            st.write(f"**所属科室**: {record['所属科室']}")
-            st.write(f"**提交时间**: {record['提交时间']}")
-            st.write(f"**预警状态**: {record['预警状态']}")
-            # 审核员可以看到提交者信息
-            if record.get('提交用户角色'):
-                st.write(f"**提交者**: {record['提交用户角色']}")
-
-            if record['预警状态'] == '历年预警期刊':
-                # 显示匹配的预警期刊信息
-                journal_match = st.session_state.warning_journals[
-                    st.session_state.warning_journals['期刊名称'].str.lower() == record['目标期刊'].lower()
-                    ]
-                if not journal_match.empty:
-                    st.write("**预警期刊详情**:")
-                    st.dataframe(journal_match, use_container_width=True)
-
-        with col2:
-            status_color = {
-                '待审核': 'orange',
-                '审核通过': 'green',
-                '审核驳回': 'red'
-            }.get(record['状态'], 'gray')
-
-            st.markdown(f"**当前状态**: <span style='color:{status_color}'>{record['状态']}</span>", unsafe_allow_html=True)
-            st.write(f"**审核人**: {record.get('审核人', '')}")
-            st.write(f"**审核时间**: {record.get('审核时间', '')}")
-            st.write(f"**审核意见**: {record.get('审核意见', '')}")
-
-            # 对于预警期刊自动驳回的记录，显示说明
-            if record['状态'] == '审核驳回' and record['审核人'] == '科研办':
-                st.info("🔍 此备案为系统自动驳回，因目标预警期刊为历年预警期刊，请改投其他期刊")
-
-
-def show_statistics_interface():
-    """统计界面"""
-    st.header("审核统计")
-
-    if not st.session_state.submissions:
-        st.info("暂无备案记录")
-    else:
-        records_df = pd.DataFrame(st.session_state.submissions)
-
-        # 总体统计
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            total_count = len(records_df)
-            st.metric("总备案数", total_count)
-        with col2:
-            pending_count = len(records_df[records_df['状态'] == '待审核'])
-            st.metric("待审核", pending_count)
-        with col3:
-            approved_count = len(records_df[records_df['状态'] == '审核通过'])
-            st.metric("审核通过", approved_count)
-        with col4:
-            rejected_count = len(records_df[records_df['状态'] == '审核驳回'])
-            st.metric("审核驳回", rejected_count)
-
-        # 自动审核统计
-        auto_rejected_count = len([s for s in st.session_state.submissions
-                                   if s['状态'] == '审核驳回' and s['审核人'] == '科研办'])
-        auto_approved_count = len([s for s in st.session_state.submissions
-                                   if s['状态'] == '审核通过' and s['审核人'] == '科研办'])
-
-        st.subheader("自动审核统计")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("自动通过", auto_approved_count)
-        with col2:
-            st.metric("自动驳回", auto_rejected_count)
-
-        # 按科室统计
-        st.subheader("按科室统计")
-        dept_stats = records_df.groupby('所属科室')['状态'].value_counts().unstack(fill_value=0)
-        st.dataframe(dept_stats, use_container_width=True)
-
-        # 按预警状态统计
-        st.subheader("按预警状态统计")
-        warning_stats = records_df.groupby('预警状态')['状态'].value_counts().unstack(fill_value=0)
-        st.dataframe(warning_stats, use_container_width=True)
-
-        # 导出审核数据
-        st.subheader("数据导出")
-        csv = records_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 导出全部审核数据(CSV)",
-            data=csv,
-            file_name=f"审核数据_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
-            mime='text/csv',
-        )
-
-
-# ==================== 主程序执行 ====================
-def main():
-    """主程序"""
-    # 初始化会话状态
-    init_session_state()
-
-    # 显示数据状态
-    show_data_status()
-
-    # 执行登录系统
-    login_system()
-
-    # 执行管理功能
-    management_functions()
-
-    # 执行主应用
-    main_application()
-
-
-if __name__ == "__main__":
-    main()
-
-    # 页脚
-    st.markdown("---")
-    st.markdown(
-        "<div style='text-align: center; color: gray;'>"
-        "武汉亚洲心脏病医院 · 科研管理办公室 · 论文投稿备案系统 "
-        "</div>",
-        unsafe_allow_html=True
-    )
+        records_df = pd.DataFrame(st.session_state.submissions
