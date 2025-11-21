@@ -343,7 +343,7 @@ def save_submissions():
         st.error(f"保存数据失败: {e}")
 
 
-# 注册退出时的自动保存 - 移到函数定义之后
+# 注册退出时的自动保存
 atexit.register(save_submissions)
 
 
@@ -437,14 +437,7 @@ def show_data_status():
         if 'last_save_time' in st.session_state:
             st.write(f"最后同步: {st.session_state.last_save_time}")
 
-        # 数据备份功能
-        if total_count > 0:
-            st.download_button(
-                label="💾 备份数据",
-                data=json.dumps(st.session_state.submissions, ensure_ascii=False, indent=2),
-                file_name=f"备案数据备份_{datetime.datetime.now().strftime('%Y%m%d')}.json",
-                mime='application/json',
-            )
+        # 移除数据备份按钮，现在只在审核人页面显示
 
 
 # ==================== 登录系统 ====================
@@ -968,4 +961,177 @@ def show_review_interface():
         st.info("暂无备案记录")
     else:
         # 审核员可以看到所有记录
-        records_df = pd.DataFrame(st.session_state.submissions
+        records_df = pd.DataFrame(st.session_state.submissions)
+        st.write(f"🔍 **审核员视图** - 共 **{len(records_df)}** 条备案记录")
+
+        # 原有的筛选和显示代码...
+        # 添加筛选选项
+        col1, col2 = st.columns(2)
+        with col1:
+            status_filter = st.selectbox("按状态筛选", ["全部", "待审核", "审核通过", "审核驳回"])
+        with col2:
+            dept_filter = st.selectbox("按科室筛选", ["全部"] + list(records_df['所属科室'].unique()))
+
+        # 应用筛选
+        filtered_df = records_df.copy()
+        if status_filter != "全部":
+            filtered_df = filtered_df[filtered_df['状态'] == status_filter]
+        if dept_filter != "全部":
+            filtered_df = filtered_df[filtered_df['所属科室'] == dept_filter]
+
+        st.write(f"显示 **{len(filtered_df)}** 条备案记录：")
+
+        # 逐条显示记录
+        for idx, record in filtered_df.iterrows():
+            show_review_record(record, idx)
+
+
+def show_review_record(record, index):
+    """显示单条审核记录"""
+    with st.expander(f"{record['论文标题']} - {record['状态']}", expanded=True):
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.write(f"**备案ID**: {record['备案ID']}")
+            st.write(f"**论文标题**: {record['论文标题']}")
+            st.write(f"**目标期刊**: {record['目标期刊']}")
+            st.write(f"**第一作者**: {record['第一作者']}")
+            st.write(f"**通讯作者**: {record['通讯作者']}")
+            st.write(f"**所属科室**: {record['所属科室']}")
+            st.write(f"**提交时间**: {record['提交时间']}")
+            st.write(f"**预警状态**: {record['预警状态']}")
+            # 审核员可以看到提交者信息
+            if record.get('提交用户角色'):
+                st.write(f"**提交者**: {record['提交用户角色']}")
+
+            if record['预警状态'] == '历年预警期刊':
+                # 显示匹配的预警期刊信息
+                journal_match = st.session_state.warning_journals[
+                    st.session_state.warning_journals['期刊名称'].str.lower() == record['目标期刊'].lower()
+                    ]
+                if not journal_match.empty:
+                    st.write("**预警期刊详情**:")
+                    st.dataframe(journal_match, use_container_width=True)
+
+        with col2:
+            status_color = {
+                '待审核': 'orange',
+                '审核通过': 'green',
+                '审核驳回': 'red'
+            }.get(record['状态'], 'gray')
+
+            st.markdown(f"**当前状态**: <span style='color:{status_color}'>{record['状态']}</span>", unsafe_allow_html=True)
+            st.write(f"**审核人**: {record.get('审核人', '')}")
+            st.write(f"**审核时间**: {record.get('审核时间', '')}")
+            st.write(f"**审核意见**: {record.get('审核意见', '')}")
+
+            # 对于预警期刊自动驳回的记录，显示说明
+            if record['状态'] == '审核驳回' and record['审核人'] == '科研办':
+                st.info("🔍 此备案为系统自动驳回，因目标预警期刊为历年预警期刊，请改投其他期刊")
+
+
+def show_statistics_interface():
+    """统计界面"""
+    st.header("审核统计")
+
+    if not st.session_state.submissions:
+        st.info("暂无备案记录")
+    else:
+        records_df = pd.DataFrame(st.session_state.submissions)
+
+        # 总体统计
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            total_count = len(records_df)
+            st.metric("总备案数", total_count)
+        with col2:
+            pending_count = len(records_df[records_df['状态'] == '待审核'])
+            st.metric("待审核", pending_count)
+        with col3:
+            approved_count = len(records_df[records_df['状态'] == '审核通过'])
+            st.metric("审核通过", approved_count)
+        with col4:
+            rejected_count = len(records_df[records_df['状态'] == '审核驳回'])
+            st.metric("审核驳回", rejected_count)
+
+        # 自动审核统计
+        auto_rejected_count = len([s for s in st.session_state.submissions
+                                   if s['状态'] == '审核驳回' and s['审核人'] == '科研办'])
+        auto_approved_count = len([s for s in st.session_state.submissions
+                                   if s['状态'] == '审核通过' and s['审核人'] == '科研办'])
+
+        st.subheader("自动审核统计")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("自动通过", auto_approved_count)
+        with col2:
+            st.metric("自动驳回", auto_rejected_count)
+
+        # 按科室统计
+        st.subheader("按科室统计")
+        dept_stats = records_df.groupby('所属科室')['状态'].value_counts().unstack(fill_value=0)
+        st.dataframe(dept_stats, use_container_width=True)
+
+        # 按预警状态统计
+        st.subheader("按预警状态统计")
+        warning_stats = records_df.groupby('预警状态')['状态'].value_counts().unstack(fill_value=0)
+        st.dataframe(warning_stats, use_container_width=True)
+
+        # ==================== 数据备份功能（移到审核人页面） ====================
+        st.markdown("---")
+        st.subheader("💾 数据备份与导出")
+
+        # 数据备份功能
+        backup_data = json.dumps(st.session_state.submissions, ensure_ascii=False, indent=2)
+        st.download_button(
+            label="💾 完整数据备份(JSON)",
+            data=backup_data,
+            file_name=f"备案数据完整备份_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime='application/json',
+            use_container_width=True
+        )
+
+        # 数据库备份信息
+        st.markdown("---")
+        st.subheader("🔧 数据库状态")
+
+        stats = db_manager.get_statistics()
+        st.info(f"""
+        **数据库状态信息**:
+        - 总备案记录: {stats.get('total_count', 0)} 条
+        - 预警期刊: {stats.get('warning_count', 0)} 种
+        - 最后备份: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        - 存储方式: SQLite 数据库 (持久化)
+        """)
+
+
+# ==================== 主程序执行 ====================
+def main():
+    """主程序"""
+    # 初始化会话状态
+    init_session_state()
+
+    # 显示数据状态
+    show_data_status()
+
+    # 执行登录系统
+    login_system()
+
+    # 执行管理功能
+    management_functions()
+
+    # 执行主应用
+    main_application()
+
+
+if __name__ == "__main__":
+    main()
+
+    # 页脚
+    st.markdown("---")
+    st.markdown(
+        "<div style='text-align: center; color: gray;'>"
+        "武汉亚洲心脏病医院 · 科研管理办公室 · 论文投稿备案系统 "
+        "</div>",
+        unsafe_allow_html=True
+    )
