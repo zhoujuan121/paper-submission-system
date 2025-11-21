@@ -73,45 +73,39 @@ tab_style_complete = """
 st.markdown(tab_style_complete, unsafe_allow_html=True)
 
 # ==================== 核心配置优化 ====================
-# 数据持久化文件路径
-DATA_FILE = Path("submissions.json")
+# 数据持久化文件路径（仅管理员数据）
+ADMIN_DATA_FILE = Path("admin_submissions.json")
 # 会话超时时间（延长至2小时，单位：秒）
 SESSION_TIMEOUT = 7200  # 2小时 = 7200秒
 # 固定盐值（确保科研人员ID唯一）
 FIXED_SALT = "whayh_hospital_research_fixed_salt_2025"
 
 
-# ==================== 数据持久化函数 ====================
-def load_submissions():
-    """从JSON文件加载所有备案记录"""
+# ==================== 数据持久化函数（仅管理员） ====================
+def load_admin_submissions():
+    """从JSON文件加载管理员持久化记录"""
     try:
-        if DATA_FILE.exists():
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
+        if ADMIN_DATA_FILE.exists():
+            with open(ADMIN_DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # 确保所有记录都有提交用户ID（兼容旧数据）
-                for record in data:
-                    if "提交用户ID" not in record:
-                        record["提交用户ID"] = hashlib.md5(
-                            (record.get("提交用户", "科研人员") + FIXED_SALT).encode('utf-8')
-                        ).hexdigest()
                 return data
         else:
             return []
     except Exception as e:
-        st.warning(f"⚠️ 加载历史数据失败，将使用空数据：{str(e)}")
+        st.warning(f"⚠️ 加载管理员数据失败：{str(e)}")
         return []
 
 
-def save_submission(submission):
-    """保存新的备案记录到JSON文件"""
+def save_admin_submission(submission):
+    """保存备案记录到管理员持久化文件"""
     try:
-        submissions = load_submissions()
+        submissions = load_admin_submissions()
         submissions.append(submission)
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+        with open(ADMIN_DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(submissions, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        st.error(f"❌ 保存备案记录失败：{str(e)}")
+        st.error(f"❌ 保存管理员记录失败：{str(e)}")
         return False
 
 
@@ -154,9 +148,8 @@ def get_security_config():
 
 
 # ==================== 数据初始化优化 ====================
-# ==================== 数据初始化优化 ====================
 def init_session_state():
-    """优化：会话级数据初始化，加载历史数据（默认科研人员身份）"""
+    """优化：会话级数据初始化"""
     # 1. 会话超时检查
     check_session_timeout()
 
@@ -172,33 +165,31 @@ def init_session_state():
         st.session_state.user_id = hashlib.md5(
             (st.session_state.current_user + FIXED_SALT).encode('utf-8')
         ).hexdigest()
+        # 管理员：加载持久化数据
+        if 'submissions' not in st.session_state:
+            st.session_state.submissions = load_admin_submissions()
     else:
         st.session_state.current_user = "科研人员"
         st.session_state.user_id = hashlib.md5(
             (st.session_state.current_user + FIXED_SALT).encode('utf-8')
         ).hexdigest()
+        # 科研人员：初始化空列表（会话级存储）
+        if 'submissions' not in st.session_state:
+            st.session_state.submissions = []
 
-    # 4. 数据初始化（加载历史数据）
-    if 'submissions' not in st.session_state:
-        st.session_state.submissions = load_submissions()
-        # 可选：仅在首次加载时显示信息
-        # if st.session_state.get('first_load') is None:
-        #     st.info(f"✅ 已加载历史备案记录：{len(st.session_state.submissions)} 条")
-        #     st.session_state['first_load'] = False
-
-    # 5. 预警期刊初始化
+    # 4. 预警期刊初始化
     if 'warning_journals' not in st.session_state:
         init_warning_journals()
     if 'show_admin_login' not in st.session_state:
         st.session_state.show_admin_login = False
-    # 6. 表单数据初始化
+
+    # 5. 表单数据初始化
     if 'paper_info' not in st.session_state:
         st.session_state.paper_info = {}
     if 'department_choice' not in st.session_state:
         st.session_state.department_choice = "心内科"
     if 'other_department_text' not in st.session_state:
         st.session_state.other_department_text = ""
-
 
 
 # ==================== 预警期刊初始化 ====================
@@ -247,10 +238,9 @@ def create_sample_journals():
 
 
 # ==================== 登录系统 ====================
-# ==================== 登录系统 ====================
 def login_system():
     """登录系统界面（保留身份切换功能）"""
-    with st.sidebar.expander("🔐 身份管理", expanded=True): # 使用 expander
+    with st.sidebar.expander("🔐 身份管理", expanded=True):
         # 显示当前身份
         if st.session_state.user_role == "科研办审核员":
             st.success(f"✅ 当前身份：{st.session_state.current_user}（管理员）")
@@ -261,9 +251,13 @@ def login_system():
                 st.session_state.user_id = hashlib.md5(
                     (st.session_state.current_user + FIXED_SALT).encode('utf-8')
                 ).hexdigest()
+                # 切换身份时重新初始化数据
+                st.session_state.submissions = []
                 st.rerun()
         else:
             st.success(f"✅ 当前身份：{st.session_state.current_user}")
+            # 显示存储提示
+            st.info("💡 科研人员记录：会话级存储")
             # 切换至管理员登录
             if st.button("🔐 切换至管理员登录"):
                 st.session_state.show_admin_login = True
@@ -300,6 +294,8 @@ def handle_admin_login(password):
             (st.session_state.current_user + FIXED_SALT).encode('utf-8')
         ).hexdigest()
         st.session_state.show_admin_login = False
+        # 管理员：加载持久化数据
+        st.session_state.submissions = load_admin_submissions()
         st.success("✅ 管理员身份验证成功！")
         st.rerun()
     else:
@@ -307,10 +303,9 @@ def handle_admin_login(password):
 
 
 # ==================== 管理功能 ====================
-
 def management_functions():
     """管理功能界面"""
-    with st.sidebar.expander("🔧 系统功能", expanded=True): # 使用 expander
+    with st.sidebar.expander("🔧 系统功能", expanded=True):
         # 预警期刊库更新
         st.subheader("预警期刊管理")
         if st.session_state.user_role == "科研办审核员":
@@ -332,9 +327,9 @@ def management_functions():
         st.write(f"预警期刊数量: **{len(st.session_state.warning_journals)}** 种")
 
         if st.session_state.user_role == "科研办审核员":
-            # 管理员：显示全量统计
+            # 管理员：显示全量统计（持久化数据）
             total_count = len(st.session_state.submissions)
-            st.write(f"总备案数量: **{total_count}** 条")
+            st.write(f"总备案数量: **{total_count}** 条（持久化存储）")
             if st.session_state.submissions:
                 records_df = pd.DataFrame(st.session_state.submissions)
                 approved_count = len(records_df[records_df['状态'] == '审核通过'])
@@ -342,9 +337,9 @@ def management_functions():
                 st.write(f"已通过: **{approved_count}** 条")
                 st.write(f"已驳回: **{rejected_count}** 条")
         else:
-            # 科研人员：显示自己的统计
+            # 科研人员：显示自己的统计（会话级数据）
             my_count = len([s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id])
-            st.write(f"我的备案数: **{my_count}** 条")
+            st.write(f"我的备案数: **{my_count}** 条（会话级存储）")
             if my_count > 0:
                 my_submissions = [s for s in st.session_state.submissions if
                                   s.get('提交用户ID') == st.session_state.user_id]
@@ -352,6 +347,7 @@ def management_functions():
                 rejected_count = len([s for s in my_submissions if s.get('状态') == '审核驳回'])
                 st.write(f"已通过: **{approved_count}** 条")
                 st.write(f"已驳回: **{rejected_count}** 条")
+
 
 # ==================== 主应用功能 ====================
 def main_application():
@@ -519,7 +515,6 @@ def show_submission_interface():
                 st.session_state.paper_info = {}
                 st.session_state.department_choice = "心内科"
                 st.session_state.other_department_text = ""
-                st.success("✅ 备案申请已提交！")
     else:
         # 提示未完成的必填项
         missing_fields = []
@@ -533,7 +528,7 @@ def show_submission_interface():
 
 def handle_submission(paper_title, authors, corresponding_author, department, other_department, target_journal,
                       planned_submission_date):
-    """处理投稿备案（保存到文件）"""
+    """处理投稿备案（关键修改：区分存储方式）"""
     # 确定最终科室
     final_department = other_department if department == '其他' else department
 
@@ -584,9 +579,17 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         submission_data['状态'] = '审核通过'
         submission_data['审核意见'] = '无预警，自动通过，可投稿'
 
-    # 保存到文件并更新会话数据
-    if save_submission(submission_data):
-        st.session_state.submissions = load_submissions()  # 刷新会话数据
+    # 关键修改：根据用户角色选择存储方式
+    if st.session_state.user_role == "科研办审核员":
+        # 管理员：持久化存储到文件
+        if save_admin_submission(submission_data):
+            st.session_state.submissions = load_admin_submissions()  # 刷新会话数据
+            st.success("✅ 备案申请已提交（持久化存储）！")
+    else:
+        # 科研人员：会话级存储（仅添加到当前会话）
+        st.session_state.submissions.append(submission_data)
+        st.success("✅ 备案申请已提交（会话级存储）！")
+        st.info("💡 注意：科研人员的记录仅在当前会话有效，关闭浏览器后将被清空")
 
     # 显示提交摘要
     st.markdown("---")
@@ -596,17 +599,18 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
 
 
 def show_my_submissions():
-    """显示当前用户的所有备案记录（从文件加载）"""
+    """显示当前用户的所有备案记录（科研人员：会话级存储）"""
     st.header("我的备案记录")
+    st.info("💡 科研人员记录：会话级存储，关闭浏览器后清空")
 
-    # 筛选当前用户的记录
+    # 筛选当前用户的记录（从会话状态获取）
     user_submissions = [s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id]
 
     if not user_submissions:
         st.info("ℹ️ 您还没有提交过备案记录，可通过「投稿备案」功能提交")
         return
 
-    st.write(f"您共有 **{len(user_submissions)}** 条备案记录：")
+    st.write(f"您共有 **{len(user_submissions)}** 条备案记录（会话级存储）：")
 
     # 转换为DataFrame显示
     display_data = []
@@ -642,10 +646,10 @@ def show_my_submissions():
     st.write(f"显示 **{len(filtered_df)}** 条记录：")
     st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
-    # 导出个人记录功能
+    # 导出个人记录功能（仅当前会话）
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 导出我的备案记录",
+        label="📥 导出我的备案记录（当前会话）",
         data=csv,
         file_name=f"我的备案记录_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
         mime='text/csv'
@@ -662,16 +666,17 @@ def show_admin_interface():
 
 
 def show_admin_review_interface():
-    """管理员备案审核（查看所有记录）"""
+    """管理员备案审核（查看所有持久化记录）"""
     st.header("审核记录")
+    st.info("💡 管理员查看的是持久化存储的所有记录")
 
     if not st.session_state.submissions:
         st.info("暂无备案记录")
         return
 
-    # 全量记录显示
+    # 全量记录显示（从持久化存储加载）
     records_df = pd.DataFrame(st.session_state.submissions)
-    st.write(f"系统共有 **{len(records_df)}** 条备案记录：")
+    st.write(f"系统共有 **{len(records_df)}** 条备案记录（持久化存储）：")
 
     # 高级筛选
     col1, col2, col3 = st.columns(3)
@@ -724,8 +729,9 @@ def show_admin_review_interface():
 
 
 def show_admin_statistics_interface():
-    """管理员统计界面（已删除时间趋势图）"""
+    """管理员统计界面"""
     st.header("审核统计")
+    st.info("💡 基于持久化存储数据的统计")
 
     if not st.session_state.submissions:
         st.info("暂无备案记录，无法生成统计数据")
@@ -787,7 +793,7 @@ def main():
     st.markdown(
         "<div style='text-align: center; color: gray; font-size: 14px;'>"
         "武汉亚洲心脏病医院 · 科研管理办公室 · 论文投稿备案系统 | 系统版本：V1.0<br>"
-                "</div>",
+        "</div>",
         unsafe_allow_html=True
     )
 
