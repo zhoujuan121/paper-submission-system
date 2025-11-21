@@ -679,7 +679,9 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
 
     # 生成备案ID
     record_id = f"BA{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
-
+    # 时区修正（UTC+8）
+    utc_time = datetime.datetime.utcnow()
+    beijing_time = utc_time + datetime.timedelta(hours=8)
     submission_data = {
         '备案ID': record_id,
         '论文标题': paper_title,
@@ -687,7 +689,7 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         '目标期刊': target_journal,
         '通讯作者': corresponding_author,
         '所属科室': final_department,  # 使用最终确定的科室名称
-        '提交时间': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        '提交时间':  beijing_time.strftime("%Y-%m-%d %H:%M:%S"),  # 北京时区时间
         '预警状态': '历年预警期刊' if not journal_match.empty else '安全',
         '提交用户ID': st.session_state.user_id,  # 记录提交者
         '提交用户角色': st.session_state.user_role  # 记录用户角色
@@ -723,14 +725,14 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         submission_data['状态'] = '审核驳回'
         submission_data['审核意见'] = '历年预警期刊，不予报销奖励，请改投其他期刊'
         submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        submission_data['审核时间'] = beijing_time.strftime("%Y-%m-%d %H:%M:%S")  # 修复审核时间
 
     else:
         st.success("✅ **期刊校验通过，备案已自动完成！**")
         submission_data['状态'] = '审核通过'
         submission_data['审核意见'] = '无预警，自动通过，可投稿'
         submission_data['审核人'] = '科研办'
-        submission_data['审核时间'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        submission_data['审核时间'] = beijing_time.strftime("%Y-%m-%d %H:%M:%S")  # 修复审核时间
 
     # 保存提交记录
     st.session_state.submissions.append(submission_data)
