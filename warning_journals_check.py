@@ -154,25 +154,17 @@ def get_security_config():
 
 
 # ==================== 数据初始化优化 ====================
-    # ==================== 数据初始化优化 ====================
-    def init_session_state():
-        """优化：会话级数据初始化，加载历史数据（默认科研人员身份）"""
-        # 强制展开侧边栏（解决无法恢复的问题）
-        if '_sidebar_state' in st.session_state and st.session_state['_sidebar_state'] == 'collapsed':
-            st.session_state['_sidebar_state'] = 'expanded'
+# ==================== 数据初始化优化 ====================
+def init_session_state():
+    """优化：会话级数据初始化，加载历史数据（默认科研人员身份）"""
+    # 1. 会话超时检查
+    check_session_timeout()
 
-        # 1. 会话超时检查
-        check_session_timeout()
-
-        # 2. 默认设置为科研人员身份（跳过未登录状态）
-        if 'user_role' not in st.session_state:
-            st.session_state.user_role = "科研人员"
-        if 'is_authenticated' not in st.session_state:
-            st.session_state.is_authenticated = True  # 默认已登录
-
-
-
-
+    # 2. 默认设置为科研人员身份（跳过未登录状态）
+    if 'user_role' not in st.session_state:
+        st.session_state.user_role = "科研人员"
+    if 'is_authenticated' not in st.session_state:
+        st.session_state.is_authenticated = True  # 默认已登录
 
     # 3. 固定用户名称和ID
     if st.session_state.user_role == "科研办审核员":
@@ -189,7 +181,10 @@ def get_security_config():
     # 4. 数据初始化（加载历史数据）
     if 'submissions' not in st.session_state:
         st.session_state.submissions = load_submissions()
-        st.info(f"✅ 已加载历史备案记录：{len(st.session_state.submissions)} 条")
+        # 可选：仅在首次加载时显示信息
+        # if st.session_state.get('first_load') is None:
+        #     st.info(f"✅ 已加载历史备案记录：{len(st.session_state.submissions)} 条")
+        #     st.session_state['first_load'] = False
 
     # 5. 预警期刊初始化
     if 'warning_journals' not in st.session_state:
@@ -203,6 +198,7 @@ def get_security_config():
         st.session_state.department_choice = "心内科"
     if 'other_department_text' not in st.session_state:
         st.session_state.other_department_text = ""
+
 
 
 # ==================== 预警期刊初始化 ====================
@@ -251,11 +247,10 @@ def create_sample_journals():
 
 
 # ==================== 登录系统 ====================
+# ==================== 登录系统 ====================
 def login_system():
     """登录系统界面（保留身份切换功能）"""
-    with st.sidebar:
-        st.header("🔐 身份管理")
-
+    with st.sidebar.expander("🔐 身份管理", expanded=True): # 使用 expander
         # 显示当前身份
         if st.session_state.user_role == "科研办审核员":
             st.success(f"✅ 当前身份：{st.session_state.current_user}（管理员）")
@@ -312,12 +307,10 @@ def handle_admin_login(password):
 
 
 # ==================== 管理功能 ====================
+
 def management_functions():
     """管理功能界面"""
-    with st.sidebar:
-        st.markdown("---")
-        st.header("🔧 系统功能")
-
+    with st.sidebar.expander("🔧 系统功能", expanded=True): # 使用 expander
         # 预警期刊库更新
         st.subheader("预警期刊管理")
         if st.session_state.user_role == "科研办审核员":
@@ -359,7 +352,6 @@ def management_functions():
                 rejected_count = len([s for s in my_submissions if s.get('状态') == '审核驳回'])
                 st.write(f"已通过: **{approved_count}** 条")
                 st.write(f"已驳回: **{rejected_count}** 条")
-
 
 # ==================== 主应用功能 ====================
 def main_application():
