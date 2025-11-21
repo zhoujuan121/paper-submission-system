@@ -72,9 +72,6 @@ st.markdown(tab_style_complete, unsafe_allow_html=True)
 
 # ==================== 数据持久化函数 ====================
 
-# 注册退出时的自动保存
-atexit.register(save_submissions)
-
 # 增强保存函数
 def save_submissions():
     """保存备案数据到本地文件"""
@@ -86,6 +83,8 @@ def save_submissions():
     except Exception as e:
         st.error(f"保存数据失败: {e}")
 
+# 注册退出时的自动保存 - 移到函数定义之后
+atexit.register(save_submissions)
 
 def load_submissions():
     """从本地文件加载备案数据"""
@@ -134,6 +133,8 @@ def init_session_state():
         st.session_state.current_user = "科研人员"  # 修改：默认用户
     if 'user_id' not in st.session_state:
         st.session_state.user_id = str(datetime.datetime.now().timestamp())
+    if 'last_save_time' not in st.session_state:
+        st.session_state.last_save_time = "尚未保存"
 
 
 def init_warning_journals():
@@ -148,7 +149,6 @@ def init_warning_journals():
                 df_cleaned = clean_dataframe(df)
                 if not df_cleaned.empty:
                     st.session_state.warning_journals = df_cleaned
-
                     return
             except (UnicodeDecodeError, LookupError):
                 continue
@@ -205,6 +205,7 @@ def show_data_status():
                 file_name=f"备案数据备份_{datetime.datetime.now().strftime('%Y%m%d')}.json",
                 mime='application/json',
             )
+
 # ==================== 登录系统 ====================
 def login_system():
     """登录系统界面"""
@@ -220,7 +221,7 @@ def login_system():
                     st.session_state.is_authenticated = True
                     st.session_state.current_user = "科研人员"
                     st.session_state.user_id = str(datetime.datetime.now().timestamp())
-                    st.rerun()  # 修复：替换为 st.rerun()
+                    st.rerun()
             else:
                 st.success("👤 当前身份：科研人员")
                 if st.button("🔐 管理员登录"):
@@ -242,7 +243,7 @@ def login_system():
 
                     if st.button("❌ 取消"):
                         st.session_state.show_admin_login = False
-                        st.rerun()  # 修复：替换为 st.rerun()
+                        st.rerun()
     except Exception as e:
         st.sidebar.error(f"侧边栏错误: {e}")
 
@@ -258,7 +259,6 @@ def handle_admin_login(password):
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
         st.success("✅ 管理员身份验证成功！")
-        # 使用 st.rerun() 替代 st.rerun()
         st.rerun()
     else:
         st.error("❌ 密码错误，请重新输入")
