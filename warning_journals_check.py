@@ -154,16 +154,25 @@ def get_security_config():
 
 
 # ==================== 数据初始化优化 ====================
-def init_session_state():
-    """优化：会话级数据初始化，加载历史数据（默认科研人员身份）"""
-    # 1. 会话超时检查
-    check_session_timeout()
+    # ==================== 数据初始化优化 ====================
+    def init_session_state():
+        """优化：会话级数据初始化，加载历史数据（默认科研人员身份）"""
+        # 强制展开侧边栏（解决无法恢复的问题）
+        if '_sidebar_state' in st.session_state and st.session_state['_sidebar_state'] == 'collapsed':
+            st.session_state['_sidebar_state'] = 'expanded'
 
-    # 2. 默认设置为科研人员身份（跳过未登录状态）
-    if 'user_role' not in st.session_state:
-        st.session_state.user_role = "科研人员"
-    if 'is_authenticated' not in st.session_state:
-        st.session_state.is_authenticated = True  # 默认已登录
+        # 1. 会话超时检查
+        check_session_timeout()
+
+        # 2. 默认设置为科研人员身份（跳过未登录状态）
+        if 'user_role' not in st.session_state:
+            st.session_state.user_role = "科研人员"
+        if 'is_authenticated' not in st.session_state:
+            st.session_state.is_authenticated = True  # 默认已登录
+
+
+
+
 
     # 3. 固定用户名称和ID
     if st.session_state.user_role == "科研办审核员":
@@ -786,8 +795,7 @@ def main():
     st.markdown(
         "<div style='text-align: center; color: gray; font-size: 14px;'>"
         "武汉亚洲心脏病医院 · 科研管理办公室 · 论文投稿备案系统 | 系统版本：V1.0<br>"
-        "✅ 备案记录已持久化存储，刷新/重启后不会丢失"
-        "</div>",
+                "</div>",
         unsafe_allow_html=True
     )
 
