@@ -653,7 +653,7 @@ def show_my_submissions():
 
 def show_admin_interface():
     """管理员界面"""
-    tab1, tab2 = st.tabs(["🔍 全量备案审核", "📊 系统审核统计"])
+    tab1, tab2 = st.tabs(["🔍 审核记录", "📊 审核统计"])
     with tab1:
         show_admin_review_interface()
     with tab2:
@@ -662,7 +662,7 @@ def show_admin_interface():
 
 def show_admin_review_interface():
     """管理员备案审核（查看所有记录）"""
-    st.header("全量备案审核")
+    st.header("审核记录")
 
     if not st.session_state.submissions:
         st.info("暂无备案记录")
@@ -724,7 +724,7 @@ def show_admin_review_interface():
 
 def show_admin_statistics_interface():
     """管理员统计界面（已删除时间趋势图）"""
-    st.header("系统审核统计分析")
+    st.header("审核统计")
 
     if not st.session_state.submissions:
         st.info("暂无备案记录，无法生成统计数据")
