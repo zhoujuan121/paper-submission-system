@@ -332,7 +332,7 @@ def save_submissions():
     """保存备案数据到数据库"""
     try:
         # 数据现在实时保存到数据库，这里主要更新session state
-        if 'submissions' in st.session_state:
+        if 'submissions' in st.session_state and 'user_id' in st.session_state and 'user_role' in st.session_state:
             # 确保session state与数据库同步
             st.session_state.submissions = db_manager.load_submissions(
                 st.session_state.user_id,
@@ -347,9 +347,14 @@ def save_submissions():
 atexit.register(save_submissions)
 
 
-def load_submissions():
+def load_submissions(user_id=None, user_role=None):
     """从数据库加载备案数据"""
-    return db_manager.load_submissions(st.session_state.user_id, st.session_state.user_role)
+    # 如果参数为空，使用默认值
+    if user_id is None:
+        user_id = st.session_state.get('user_id', 'default_user')
+    if user_role is None:
+        user_role = st.session_state.get('user_role', '科研人员')
+    return db_manager.load_submissions(user_id, user_role)
 
 
 # ==================== 安全配置函数 ====================
@@ -373,21 +378,24 @@ def get_security_config():
 # ==================== 数据初始化 ====================
 def init_session_state():
     """初始化会话状态"""
+    # 首先初始化基本身份信息
     if 'user_role' not in st.session_state:
         st.session_state.user_role = "科研人员"
     if 'is_authenticated' not in st.session_state:
         st.session_state.is_authenticated = True
-    if 'submissions' not in st.session_state:
-        st.session_state.submissions = load_submissions()
-    if 'warning_journals' not in st.session_state:
-        st.session_state.warning_journals = db_manager.load_warning_journals()
-    if 'show_admin_login' not in st.session_state:
-        st.session_state.show_admin_login = False
     if 'current_user' not in st.session_state:
         st.session_state.current_user = "科研人员"
     if 'user_id' not in st.session_state:
         # 生成更稳定的用户ID（基于时间戳和随机数）
         st.session_state.user_id = f"user_{int(datetime.datetime.now().timestamp())}_{hashlib.md5(str(os.urandom(8)).encode()).hexdigest()[:8]}"
+
+    # 然后初始化数据
+    if 'submissions' not in st.session_state:
+        st.session_state.submissions = load_submissions(st.session_state.user_id, st.session_state.user_role)
+    if 'warning_journals' not in st.session_state:
+        st.session_state.warning_journals = db_manager.load_warning_journals()
+    if 'show_admin_login' not in st.session_state:
+        st.session_state.show_admin_login = False
     if 'last_save_time' not in st.session_state:
         st.session_state.last_save_time = "尚未保存"
     if 'db_initialized' not in st.session_state:
@@ -455,7 +463,8 @@ def login_system():
                     st.session_state.is_authenticated = True
                     st.session_state.current_user = "科研人员"
                     st.session_state.user_id = f"user_{int(datetime.datetime.now().timestamp())}_{hashlib.md5(str(os.urandom(8)).encode()).hexdigest()[:8]}"
-                    st.session_state.submissions = load_submissions()  # 重新加载数据
+                    st.session_state.submissions = load_submissions(st.session_state.user_id,
+                                                                    st.session_state.user_role)
                     st.rerun()
             else:
                 st.success("👤 当前身份：科研人员")
@@ -493,7 +502,7 @@ def handle_admin_login(password):
         st.session_state.is_authenticated = True
         st.session_state.current_user = "科研办管理员"
         st.session_state.show_admin_login = False
-        st.session_state.submissions = load_submissions()  # 重新加载所有数据
+        st.session_state.submissions = load_submissions(st.session_state.user_id, st.session_state.user_role)
         st.success("✅ 管理员身份验证成功！")
         st.rerun()
     else:
@@ -866,7 +875,7 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
     # 保存提交记录到数据库
     if db_manager.save_submission(submission_data):
         # 更新session state
-        st.session_state.submissions = load_submissions()
+        st.session_state.submissions = load_submissions(st.session_state.user_id, st.session_state.user_role)
         save_submissions()  # 更新保存时间
 
         # 显示提交摘要
