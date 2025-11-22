@@ -256,8 +256,7 @@ def login_system():
                 st.rerun()
         else:
             st.success(f"✅ 当前身份：{st.session_state.current_user}")
-            # 显示存储提示
-            st.info("💡 科研人员记录：会话级存储")
+
             # 切换至管理员登录
             if st.button("🔐 切换至管理员登录"):
                 st.session_state.show_admin_login = True
@@ -601,7 +600,6 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
 def show_my_submissions():
     """显示当前用户的所有备案记录（科研人员：会话级存储）"""
     st.header("我的备案记录")
-    st.info("💡 科研人员记录：会话级存储，关闭浏览器后清空")
 
     # 筛选当前用户的记录（从会话状态获取）
     user_submissions = [s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id]
@@ -610,7 +608,7 @@ def show_my_submissions():
         st.info("ℹ️ 您还没有提交过备案记录，可通过「投稿备案」功能提交")
         return
 
-    st.write(f"您共有 **{len(user_submissions)}** 条备案记录（会话级存储）：")
+    st.write(f"您共有 **{len(user_submissions)}** 条备案记录：")
 
     # 转换为DataFrame显示
     display_data = []
@@ -646,14 +644,6 @@ def show_my_submissions():
     st.write(f"显示 **{len(filtered_df)}** 条记录：")
     st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
-    # 导出个人记录功能（仅当前会话）
-    csv = filtered_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 导出我的备案记录（当前会话）",
-        data=csv,
-        file_name=f"我的备案记录_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
-        mime='text/csv'
-    )
 
 
 def show_admin_interface():
@@ -668,7 +658,6 @@ def show_admin_interface():
 def show_admin_review_interface():
     """管理员备案审核（查看所有持久化记录）"""
     st.header("审核记录")
-    st.info("💡 管理员查看的是持久化存储的所有记录")
 
     if not st.session_state.submissions:
         st.info("暂无备案记录")
@@ -676,7 +665,7 @@ def show_admin_review_interface():
 
     # 全量记录显示（从持久化存储加载）
     records_df = pd.DataFrame(st.session_state.submissions)
-    st.write(f"系统共有 **{len(records_df)}** 条备案记录（持久化存储）：")
+    st.write(f"系统共有 **{len(records_df)}** 条备案记录：")
 
     # 高级筛选
     col1, col2, col3 = st.columns(3)
@@ -731,7 +720,7 @@ def show_admin_review_interface():
 def show_admin_statistics_interface():
     """管理员统计界面"""
     st.header("审核统计")
-    st.info("💡 基于持久化存储数据的统计")
+
 
     if not st.session_state.submissions:
         st.info("暂无备案记录，无法生成统计数据")
@@ -765,9 +754,9 @@ def show_admin_statistics_interface():
     st.subheader("4. 数据导出")
     csv = records_df.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 导出全量备案数据(CSV)",
+        label="📥 导出备案数据统计(CSV)",
         data=csv,
-        file_name=f"全量备案数据_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
+        file_name=f"备案数据统计_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
         mime='text/csv',
         type="primary"
     )
