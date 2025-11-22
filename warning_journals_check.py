@@ -500,8 +500,7 @@ def show_submission_interface():
                 st.write(f"**目标期刊**: {st.session_state.paper_info['target_journal']}")
                 st.write(f"**拟投稿日期**: {st.session_state.paper_info['planned_submission_date']}")
                 st.write(f"**所属科室**: {final_department}")
-
-            st.markdown("**注意**: 提交后将永久保存，可在「我的备案记录」中查看！")
+            st.markdown("⚠️ **提交前请务必核对信息！** 提交后可在「我的备案记录」中查看审核意见。")
             submitted = st.form_submit_button("🚀 提交备案申请", type="primary")
 
             if submitted:
