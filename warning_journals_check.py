@@ -326,7 +326,7 @@ def management_functions():
         st.write(f"预警期刊数量: **{len(st.session_state.warning_journals)}** 种")
 
         if st.session_state.user_role == "科研办审核员":
-      
+
             total_count = len(st.session_state.submissions)
             st.write(f"总备案数量: **{total_count}** 条")
             if st.session_state.submissions:
@@ -336,7 +336,7 @@ def management_functions():
                 st.write(f"已通过: **{approved_count}** 条")
                 st.write(f"已驳回: **{rejected_count}** 条")
         else:
-            # 科研人员：显示自己的统计（会话级数据）
+            # 科研人员：显示自己的统计
             my_count = len([s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id])
             st.write(f"我的备案数: **{my_count}** 条")
             if my_count > 0:
@@ -578,17 +578,24 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         submission_data['状态'] = '审核通过'
         submission_data['审核意见'] = '无预警，自动通过，可投稿'
 
-    # 关键修改：根据用户角色选择存储方式
+
+    # ✅ 无论谁提交，都先写入持久化文件，供管理员长期查看
+    if not save_admin_submission(submission_data):
+        st.error("❌ 备案保存失败，请联系管理员")
+        return
+
+    # 然后根据身份决定如何在当前会话中展示
     if st.session_state.user_role == "科研办审核员":
-        # 管理员：持久化存储到文件
-        if save_admin_submission(submission_data):
-            st.session_state.submissions = load_admin_submissions()  # 刷新会话数据
-            st.success("✅ 备案申请已提交！")
+        # 管理员：从文件重新加载全量数据（保证统计和审核页是最新的）
+        st.session_state.submissions = load_admin_submissions()
+        st.success("✅ 备案申请已提交！")
     else:
-        # 科研人员：会话级存储（仅添加到当前会话）
+        # 科研人员：只把本次提交追加到本会话内存，不从文件加载历史
         st.session_state.submissions.append(submission_data)
         st.success("✅ 备案申请已提交！")
-        st.info("💡 注意：科研人员的记录仅在当前会话有效，关闭浏览器后将被清空")
+        st.info("ℹ️ 当前登录期间，您可在「我的备案记录」中查看本次提交记录")
+
+
 
     # 显示提交摘要
     st.markdown("---")
