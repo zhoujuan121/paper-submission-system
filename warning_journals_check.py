@@ -173,7 +173,7 @@ def init_session_state():
         st.session_state.user_id = hashlib.md5(
             (st.session_state.current_user + FIXED_SALT).encode('utf-8')
         ).hexdigest()
-        # 科研人员：初始化空列表（会话级存储）
+        # 科研人员：初始化空列表
         if 'submissions' not in st.session_state:
             st.session_state.submissions = []
 
@@ -326,9 +326,9 @@ def management_functions():
         st.write(f"预警期刊数量: **{len(st.session_state.warning_journals)}** 种")
 
         if st.session_state.user_role == "科研办审核员":
-            # 管理员：显示全量统计（持久化数据）
+      
             total_count = len(st.session_state.submissions)
-            st.write(f"总备案数量: **{total_count}** 条（持久化存储）")
+            st.write(f"总备案数量: **{total_count}** 条")
             if st.session_state.submissions:
                 records_df = pd.DataFrame(st.session_state.submissions)
                 approved_count = len(records_df[records_df['状态'] == '审核通过'])
@@ -338,7 +338,7 @@ def management_functions():
         else:
             # 科研人员：显示自己的统计（会话级数据）
             my_count = len([s for s in st.session_state.submissions if s.get('提交用户ID') == st.session_state.user_id])
-            st.write(f"我的备案数: **{my_count}** 条（会话级存储）")
+            st.write(f"我的备案数: **{my_count}** 条")
             if my_count > 0:
                 my_submissions = [s for s in st.session_state.submissions if
                                   s.get('提交用户ID') == st.session_state.user_id]
@@ -583,11 +583,11 @@ def handle_submission(paper_title, authors, corresponding_author, department, ot
         # 管理员：持久化存储到文件
         if save_admin_submission(submission_data):
             st.session_state.submissions = load_admin_submissions()  # 刷新会话数据
-            st.success("✅ 备案申请已提交（持久化存储）！")
+            st.success("✅ 备案申请已提交！")
     else:
         # 科研人员：会话级存储（仅添加到当前会话）
         st.session_state.submissions.append(submission_data)
-        st.success("✅ 备案申请已提交（会话级存储）！")
+        st.success("✅ 备案申请已提交！")
         st.info("💡 注意：科研人员的记录仅在当前会话有效，关闭浏览器后将被清空")
 
     # 显示提交摘要
@@ -773,6 +773,7 @@ def main():
 
     # 显示管理功能
     management_functions()
+
 
     # 显示主应用界面
     main_application()
